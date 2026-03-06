@@ -1,0 +1,2363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JavaScript Execution Model — Deep Reference</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,600;0,900;1,300;1,600&family=IBM+Plex+Mono:wght@400;600&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink: #0e0e12;
+  --paper: #f5f0e8;
+  --paper2: #ede7d8;
+  --paper3: #e0d8c8;
+  --accent: #c0392b;
+  --accent2: #1a6b3a;
+  --accent3: #1c3f7a;
+  --accent4: #7a4f1c;
+  --muted: #7a7060;
+  --border: #c8bfaa;
+  --code-bg: #1a1a24;
+  --code-text: #e8e0d0;
+  --highlight: #f0c040;
+  --highlight2: #a8e6a8;
+  --highlight3: #a8c8f0;
+  --highlight4: #f0a8a8;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Instrument Sans', sans-serif;
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+/* ─── SIDEBAR NAV ─── */
+.layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  background: var(--ink);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-logo {
+  padding: 28px 24px 20px;
+  border-bottom: 1px solid #2a2a3a;
+}
+
+.sidebar-logo-tag {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #c0392b;
+  margin-bottom: 6px;
+}
+
+.sidebar-logo h2 {
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: #f5f0e8;
+  line-height: 1.3;
+}
+
+.sidebar-nav {
+  padding: 16px 0;
+  flex: 1;
+}
+
+.nav-section {
+  padding: 6px 24px 2px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #4a4a5a;
+  margin-top: 12px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 24px;
+  color: #8a8898;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.15s;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+}
+
+.nav-item:hover { color: #f5f0e8; background: #1a1a26; }
+.nav-item.active { color: #f5f0e8; border-left-color: #c0392b; background: #1a1a26; }
+
+.nav-num {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: #c0392b;
+  flex-shrink: 0;
+  width: 20px;
+}
+
+/* ─── MAIN CONTENT ─── */
+.main {
+  flex: 1;
+  overflow-x: hidden;
+}
+
+/* ─── TOPIC PAGES ─── */
+.topic-page {
+  display: none;
+  min-height: 100vh;
+}
+.topic-page.active { display: block; }
+
+/* ─── HERO BANNER per topic ─── */
+.topic-hero {
+  padding: 64px 64px 48px;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+.topic-hero::before {
+  content: attr(data-num);
+  position: absolute;
+  right: 48px;
+  top: 20px;
+  font-family: 'Fraunces', serif;
+  font-size: 10rem;
+  font-weight: 900;
+  color: rgba(0,0,0,0.05);
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+}
+
+.topic-eyebrow {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.topic-hero h1 {
+  font-family: 'Fraunces', serif;
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  font-weight: 900;
+  line-height: 1.1;
+  color: var(--ink);
+  margin-bottom: 16px;
+}
+
+.topic-hero .lead {
+  font-size: 1.05rem;
+  color: var(--muted);
+  max-width: 640px;
+  font-style: italic;
+  font-family: 'Fraunces', serif;
+  font-weight: 300;
+}
+
+/* ─── CONTENT BODY ─── */
+.content-body {
+  padding: 52px 64px;
+  max-width: 900px;
+}
+
+@media (max-width: 900px) {
+  .sidebar { display: none; }
+  .topic-hero, .content-body { padding: 32px 24px; }
+  .topic-hero::before { display: none; }
+}
+
+/* ─── TYPOGRAPHY ─── */
+.content-body h2 {
+  font-family: 'Fraunces', serif;
+  font-size: 1.7rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 48px 0 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.content-body h2:first-child { margin-top: 0; }
+
+.content-body h3 {
+  font-family: 'Fraunces', serif;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--accent3);
+  margin: 32px 0 12px;
+}
+
+.content-body p {
+  margin-bottom: 16px;
+  font-size: 15.5px;
+  line-height: 1.8;
+}
+
+.content-body ul, .content-body ol {
+  padding-left: 24px;
+  margin-bottom: 16px;
+}
+
+.content-body li {
+  margin-bottom: 8px;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+/* ─── CALLOUT BOXES ─── */
+.callout {
+  padding: 18px 22px;
+  border-radius: 2px;
+  margin: 24px 0;
+  border-left: 4px solid;
+  font-size: 14.5px;
+  line-height: 1.7;
+}
+
+.callout-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.callout-definition { background: rgba(28,63,122,0.07); border-color: var(--accent3); }
+.callout-definition .callout-label { color: var(--accent3); }
+
+.callout-important { background: rgba(192,57,43,0.07); border-color: var(--accent); }
+.callout-important .callout-label { color: var(--accent); }
+
+.callout-note { background: rgba(26,107,58,0.07); border-color: var(--accent2); }
+.callout-note .callout-label { color: var(--accent2); }
+
+.callout-analogy { background: rgba(122,79,28,0.07); border-color: var(--accent4); }
+.callout-analogy .callout-label { color: var(--accent4); }
+
+/* ─── CODE BLOCKS ─── */
+.code-wrap {
+  background: var(--code-bg);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 20px 0;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+}
+
+.code-header {
+  background: #12121c;
+  padding: 10px 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid #2a2a3a;
+}
+
+.code-dots { display: flex; gap: 6px; }
+.code-dot { width: 10px; height: 10px; border-radius: 50%; }
+.cd-r { background: #ff5f57; }
+.cd-y { background: #febc2e; }
+.cd-g { background: #28c840; }
+.code-filename {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: #6a6a7a;
+  letter-spacing: 0.5px;
+  margin-left: 4px;
+}
+
+pre {
+  padding: 22px 24px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px;
+  line-height: 1.9;
+  color: var(--code-text);
+  overflow-x: auto;
+  tab-size: 2;
+}
+
+.kw { color: #c792ea; }
+.fn { color: #82aaff; }
+.str { color: #c3e88d; }
+.num { color: #f78c6c; }
+.cmt { color: #4a6070; font-style: italic; }
+.var-name { color: #ffcb6b; }
+.op { color: #89ddff; }
+.prop { color: #f07178; }
+.hi-y { background: rgba(240,192,64,0.25); padding: 1px 3px; border-radius: 2px; color: #f0c040; }
+.hi-g { background: rgba(168,230,168,0.2); padding: 1px 3px; border-radius: 2px; color: #7ecf7e; }
+.hi-b { background: rgba(168,200,240,0.2); padding: 1px 3px; border-radius: 2px; color: #82aaff; }
+.hi-r { background: rgba(240,168,168,0.2); padding: 1px 3px; border-radius: 2px; color: #f07178; }
+
+/* ─── DIAGRAM CONTAINERS ─── */
+.diagram {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 32px;
+  margin: 24px 0;
+  overflow-x: auto;
+}
+
+.diagram-title {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+/* ─── EC BOX DIAGRAMS ─── */
+.ec-box {
+  border: 2px solid;
+  border-radius: 6px;
+  overflow: hidden;
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+.ec-title-bar {
+  padding: 10px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.ec-body {
+  padding: 0;
+}
+
+.ec-row {
+  display: flex;
+  border-top: 1px solid;
+  font-size: 12px;
+}
+
+.ec-key {
+  padding: 8px 14px;
+  width: 45%;
+  font-weight: 600;
+  border-right: 1px solid;
+}
+
+.ec-val {
+  padding: 8px 14px;
+  width: 55%;
+}
+
+/* Color themes for EC boxes */
+.ec-global { border-color: #1a6b3a; }
+.ec-global .ec-title-bar { background: rgba(26,107,58,0.1); color: #1a6b3a; }
+.ec-global .ec-row { border-color: rgba(26,107,58,0.2); }
+.ec-global .ec-key { border-color: rgba(26,107,58,0.2); color: #1a6b3a; }
+
+.ec-func { border-color: #1c3f7a; }
+.ec-func .ec-title-bar { background: rgba(28,63,122,0.1); color: #1c3f7a; }
+.ec-func .ec-row { border-color: rgba(28,63,122,0.2); }
+.ec-func .ec-key { border-color: rgba(28,63,122,0.2); color: #1c3f7a; }
+
+.ec-func2 { border-color: #7a4f1c; }
+.ec-func2 .ec-title-bar { background: rgba(122,79,28,0.1); color: #7a4f1c; }
+.ec-func2 .ec-row { border-color: rgba(122,79,28,0.2); }
+.ec-func2 .ec-key { border-color: rgba(122,79,28,0.2); color: #7a4f1c; }
+
+/* ─── CALL STACK VISUAL ─── */
+.call-stack-visual {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+.cs-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+  align-self: flex-start;
+  padding-left: calc(50% - 120px);
+}
+
+.cs-frame {
+  width: 240px;
+  padding: 12px 18px;
+  border: 1px solid;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  text-align: center;
+  position: relative;
+  transition: transform 0.2s;
+  cursor: default;
+}
+.cs-frame:hover { transform: scale(1.02); z-index: 2; }
+
+.cs-sep { width: 1px; height: 16px; background: #c8bfaa; }
+
+.cs-global { background: rgba(26,107,58,0.08); border-color: #1a6b3a; color: #1a6b3a; border-radius: 0 0 6px 6px; }
+.cs-f1 { background: rgba(28,63,122,0.08); border-color: #1c3f7a; color: #1c3f7a; }
+.cs-f2 { background: rgba(122,79,28,0.08); border-color: #7a4f1c; color: #7a4f1c; }
+.cs-f3 { background: rgba(192,57,43,0.08); border-color: #c0392b; color: #c0392b; border-radius: 6px 6px 0 0; }
+
+/* ─── PHASE TIMELINE ─── */
+.phase-timeline {
+  display: flex;
+  gap: 0;
+  align-items: stretch;
+  margin: 24px 0;
+}
+
+.phase-block {
+  flex: 1;
+  padding: 20px;
+  position: relative;
+}
+
+.phase-block::after {
+  content: '→';
+  position: absolute;
+  right: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 20px;
+  color: var(--muted);
+  z-index: 1;
+}
+.phase-block:last-child::after { display: none; }
+
+.phase-num {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.phase-title {
+  font-family: 'Fraunces', serif;
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.phase-items {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+/* ─── SCOPE CHAIN DIAGRAM ─── */
+.scope-nest {
+  position: relative;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+}
+
+.scope-level {
+  border: 2px solid;
+  border-radius: 8px;
+  padding: 16px;
+  position: relative;
+}
+
+.scope-level + .scope-level {
+  margin-top: 0;
+}
+
+.scope-inner-wrap {
+  margin-top: 12px;
+}
+
+.scope-tag {
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.scope-vars {
+  font-size: 11px;
+  line-height: 1.8;
+  margin-bottom: 8px;
+}
+
+.scope-arrow-down {
+  text-align: center;
+  font-size: 18px;
+  color: var(--muted);
+  padding: 4px 0;
+}
+
+/* ─── HORIZONTAL RULE ─── */
+.hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+
+/* ─── TABLE ─── */
+.comparison-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  margin: 20px 0;
+}
+
+.comparison-table th {
+  padding: 10px 14px;
+  text-align: left;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  background: var(--paper2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.comparison-table td {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  vertical-align: top;
+  line-height: 1.6;
+}
+
+.comparison-table tr:nth-child(even) td {
+  background: rgba(0,0,0,0.02);
+}
+
+/* ─── INLINE CODE ─── */
+code {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12.5px;
+  background: var(--paper3);
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: var(--accent);
+}
+
+/* ─── BADGE ─── */
+.badge {
+  display: inline-block;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  padding: 3px 8px;
+  border-radius: 2px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  vertical-align: middle;
+  margin-left: 6px;
+}
+
+.badge-red { background: rgba(192,57,43,0.12); color: var(--accent); }
+.badge-blue { background: rgba(28,63,122,0.12); color: var(--accent3); }
+.badge-green { background: rgba(26,107,58,0.12); color: var(--accent2); }
+.badge-amber { background: rgba(122,79,28,0.12); color: var(--accent4); }
+
+/* ─── INTERACTIVE STEP PLAYER ─── */
+.step-player {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 24px 0;
+}
+
+.step-player-header {
+  background: var(--paper2);
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.step-player-title {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.step-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.step-btn {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  background: white;
+  color: var(--ink);
+  border-radius: 3px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  transition: all 0.15s;
+}
+.step-btn:hover { background: var(--ink); color: white; }
+.step-btn:disabled { opacity: 0.3; cursor: default; }
+.step-btn:disabled:hover { background: white; color: var(--ink); }
+
+.step-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
+
+.step-code-pane, .step-state-pane {
+  padding: 20px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+}
+
+.step-code-pane {
+  background: var(--code-bg);
+  color: var(--code-text);
+  border-right: 1px solid #2a2a3a;
+  line-height: 1.9;
+}
+
+.step-state-pane {
+  background: #fafaf7;
+  color: var(--ink);
+}
+
+.step-line { padding: 1px 0; }
+.step-line.current { background: rgba(240,192,64,0.2); border-left: 2px solid #f0c040; padding-left: 6px; }
+
+.state-section {
+  margin-bottom: 16px;
+}
+
+.state-label {
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.state-item {
+  font-size: 11px;
+  padding: 4px 0;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  gap: 8px;
+}
+
+.state-key { color: var(--accent3); font-weight: 600; }
+.state-val { color: var(--accent); }
+.state-desc { color: var(--muted); font-size: 10px; }
+
+.step-info {
+  padding: 12px 20px;
+  background: rgba(28,63,122,0.05);
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  line-height: 1.6;
+  border-left: 3px solid var(--accent3);
+  font-style: italic;
+}
+
+/* ─── BOTTOM NAV ─── */
+.bottom-nav {
+  padding: 40px 64px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.bottom-nav-btn {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 12px 24px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.15s;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.bottom-nav-btn:hover { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.bottom-nav-btn.disabled { opacity: 0.3; pointer-events: none; }
+
+.bottom-nav-center {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+
+/* ─── MOBILE TOPBAR ─── */
+.mobile-topbar {
+  display: none;
+  background: var(--ink);
+  padding: 14px 20px;
+  align-items: center;
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+@media (max-width: 900px) {
+  .mobile-topbar { display: flex; }
+  .bottom-nav { padding: 32px 24px; }
+}
+
+.mobile-menu-btn {
+  background: none;
+  border: none;
+  color: #f5f0e8;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 2px;
+}
+
+.mobile-title {
+  font-family: 'Fraunces', serif;
+  color: #f5f0e8;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ─── PROGRESS BAR ─── */
+.progress-strip {
+  height: 3px;
+  background: var(--paper3);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.progress-fill-strip {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s;
+}
+</style>
+</head>
+<body>
+
+<div class="layout">
+
+<!-- ══════════ SIDEBAR ══════════ -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-tag">Deep Reference</div>
+    <h2>JavaScript<br>Execution Model</h2>
+  </div>
+  <div class="sidebar-nav">
+    <div class="nav-section">Core Model</div>
+    <div class="nav-item active" onclick="goTo(0)"><span class="nav-num">01</span> JS Execution Model Overview</div>
+    <div class="nav-item" onclick="goTo(1)"><span class="nav-num">02</span> Global Execution Context</div>
+    <div class="nav-item" onclick="goTo(2)"><span class="nav-num">03</span> Function Execution Context</div>
+    <div class="nav-section">Mechanics</div>
+    <div class="nav-item" onclick="goTo(3)"><span class="nav-num">04</span> Call Stack Mechanics</div>
+    <div class="nav-item" onclick="goTo(4)"><span class="nav-num">05</span> Parsing & Execution</div>
+    <div class="nav-section">Internals</div>
+    <div class="nav-item" onclick="goTo(5)"><span class="nav-num">06</span> Creation vs Execution Phase</div>
+    <div class="nav-item" onclick="goTo(6)"><span class="nav-num">07</span> Variable Environment</div>
+    <div class="nav-item" onclick="goTo(7)"><span class="nav-num">08</span> Scope Chain Formation</div>
+  </div>
+</nav>
+
+<!-- ══════════ MAIN ══════════ -->
+<main class="main">
+
+<div class="progress-strip"><div class="progress-fill-strip" id="progressBar" style="width:12.5%"></div></div>
+
+<!-- ════════════════════════════════════
+     PAGE 0 — JS Execution Model Overview
+════════════════════════════════════════ -->
+<article class="topic-page active" id="page-0">
+  <div class="topic-hero" data-num="01">
+    <div class="topic-eyebrow">Topic 01 of 08</div>
+    <h1>JavaScript Execution<br>Model Overview</h1>
+    <p class="lead">Before a single line of your code runs, JavaScript has already done considerable work. Understanding this pipeline — from source text to running instructions — is the foundation of everything else.</p>
+  </div>
+
+  <div class="content-body">
+
+    <h2>What "Execution Model" Means</h2>
+    <p>The <strong>execution model</strong> describes the complete system JavaScript uses to run your code: how it is received, how environments are set up, how functions are tracked, and how control flows between them. It is the mental model that explains <em>why</em> code behaves the way it does.</p>
+
+    <div class="callout callout-definition">
+      <div class="callout-label">Definition</div>
+      The JavaScript execution model is the set of rules governing how the engine receives source code, creates execution environments, manages the call stack, and ultimately produces observable output.
+    </div>
+
+    <h2>The Three Pillars</h2>
+    <p>The entire execution model rests on three core mechanisms. Every behavior you will ever observe in JavaScript — hoisting, closures, <code>this</code> binding, scope — can be traced back to these:</p>
+
+    <div class="diagram">
+      <div class="diagram-title">Three pillars of the JavaScript execution model</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:4px;overflow:hidden">
+        <div style="background:rgba(26,107,58,0.06);padding:24px">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--accent2);margin-bottom:10px">Pillar 1</div>
+          <div style="font-family:'Fraunces',serif;font-size:1.1rem;font-weight:600;margin-bottom:10px">Execution Contexts</div>
+          <div style="font-size:13px;color:var(--muted);line-height:1.6">Containers that hold code's runtime environment: variables, functions, scope, and <code>this</code>. Created for every function call.</div>
+        </div>
+        <div style="background:rgba(28,63,122,0.06);padding:24px">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--accent3);margin-bottom:10px">Pillar 2</div>
+          <div style="font-family:'Fraunces',serif;font-size:1.1rem;font-weight:600;margin-bottom:10px">The Call Stack</div>
+          <div style="font-size:13px;color:var(--muted);line-height:1.6">A LIFO data structure tracking which context is currently executing. Determines control flow and manages context lifetimes.</div>
+        </div>
+        <div style="background:rgba(122,79,28,0.06);padding:24px">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--accent4);margin-bottom:10px">Pillar 3</div>
+          <div style="font-family:'Fraunces',serif;font-size:1.1rem;font-weight:600;margin-bottom:10px">The Scope Chain</div>
+          <div style="font-size:13px;color:var(--muted);line-height:1.6">A linked chain of variable environments allowing inner scopes to access outer variables. Built at function creation, not at call time.</div>
+        </div>
+      </div>
+    </div>
+
+    <h2>Single-Threaded and Synchronous — By Default</h2>
+    <p>JavaScript engines execute code on a <strong>single thread</strong>. This is fundamental: only one piece of code runs at any given moment. There is one call stack. There is no parallel execution of synchronous code.</p>
+
+    <div class="callout callout-important">
+      <div class="callout-label">Critical Implication</div>
+      Because JS is single-threaded, if a function takes a long time, everything else <em>waits</em>. The call stack is blocked. This is why long-running operations use callbacks, promises, and async/await — to defer work to the event loop rather than blocking the main thread.
+    </div>
+
+    <h2>The Engine Pipeline: Source → Output</h2>
+    <p>Before your code produces any output, it goes through a pipeline inside the JavaScript engine (e.g. V8, SpiderMonkey, JavaScriptCore):</p>
+
+    <div class="diagram">
+      <div class="diagram-title">Engine pipeline for JavaScript source code</div>
+      <div style="display:flex;align-items:center;gap:0;overflow-x:auto;padding:8px 0">
+        <div style="text-align:center;padding:16px 20px;background:rgba(192,57,43,0.07);border:1px solid rgba(192,57,43,0.3);border-radius:6px;min-width:120px">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--accent);text-transform:uppercase;margin-bottom:6px">Step 1</div>
+          <div style="font-weight:600;font-size:13px">Source Code</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">.js text</div>
+        </div>
+        <div style="padding:0 8px;color:var(--muted);font-size:20px;flex-shrink:0">→</div>
+        <div style="text-align:center;padding:16px 20px;background:rgba(28,63,122,0.07);border:1px solid rgba(28,63,122,0.3);border-radius:6px;min-width:120px">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--accent3);text-transform:uppercase;margin-bottom:6px">Step 2</div>
+          <div style="font-weight:600;font-size:13px">Tokenizing</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">Lexer splits into tokens</div>
+        </div>
+        <div style="padding:0 8px;color:var(--muted);font-size:20px;flex-shrink:0">→</div>
+        <div style="text-align:center;padding:16px 20px;background:rgba(26,107,58,0.07);border:1px solid rgba(26,107,58,0.3);border-radius:6px;min-width:120px">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--accent2);text-transform:uppercase;margin-bottom:6px">Step 3</div>
+          <div style="font-weight:600;font-size:13px">Parsing → AST</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">Abstract Syntax Tree</div>
+        </div>
+        <div style="padding:0 8px;color:var(--muted);font-size:20px;flex-shrink:0">→</div>
+        <div style="text-align:center;padding:16px 20px;background:rgba(122,79,28,0.07);border:1px solid rgba(122,79,28,0.3);border-radius:6px;min-width:120px">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--accent4);text-transform:uppercase;margin-bottom:6px">Step 4</div>
+          <div style="font-weight:600;font-size:13px">Bytecode / JIT</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">Compiled to machine ops</div>
+        </div>
+        <div style="padding:0 8px;color:var(--muted);font-size:20px;flex-shrink:0">→</div>
+        <div style="text-align:center;padding:16px 20px;background:rgba(0,0,0,0.04);border:1px solid var(--border);border-radius:6px;min-width:120px">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Step 5</div>
+          <div style="font-weight:600;font-size:13px">Execution</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">Context created, code runs</div>
+        </div>
+      </div>
+    </div>
+
+    <h2>JavaScript is Interpreted — But Also Compiled</h2>
+    <p>JavaScript is often called an "interpreted language", but modern engines like V8 use <strong>Just-In-Time (JIT) compilation</strong>. The source code is parsed into an AST, compiled to bytecode, profiled for hot paths, and then optimized machine code is generated for frequently-run sections.</p>
+    <p>For understanding the execution model, the key practical takeaway is that the engine <em>sees the entire source before executing</em>. This is why hoisting and the creation phase exist.</p>
+
+    <div class="callout callout-analogy">
+      <div class="callout-label">Analogy</div>
+      Think of the JavaScript engine as a chef who reads the entire recipe before starting to cook. During the read-through (creation phase), they gather all ingredients and prep the station. Only then do they start cooking (execution phase), step by step.
+    </div>
+
+    <h2>The Big Picture: What Happens When You Run a Script</h2>
+
+    <div class="code-wrap">
+      <div class="code-header"><div class="code-dots"><span class="code-dot cd-r"></span><span class="code-dot cd-y"></span><span class="code-dot cd-g"></span></div><span class="code-filename">example.js — traced step by step</span></div>
+      <pre>
+<span class="kw">var</span> <span class="var-name">userName</span> <span class="op">=</span> <span class="str">"Alice"</span>;          <span class="cmt">// ← assigned in execution phase</span>
+
+<span class="kw">function</span> <span class="fn">greet</span>(<span class="var-name">name</span>) {          <span class="cmt">// ← stored whole in creation phase</span>
+  <span class="kw">return</span> <span class="str">"Hello, "</span> <span class="op">+</span> <span class="var-name">name</span>;
+}
+
+<span class="kw">var</span> <span class="var-name">message</span> <span class="op">=</span> <span class="fn">greet</span>(<span class="var-name">userName</span>); <span class="cmt">// ← new function EC pushed onto stack</span>
+console.log(<span class="var-name">message</span>);           <span class="cmt">// ← outputs "Hello, Alice"</span></pre>
+    </div>
+
+    <p>Execution sequence for this script:</p>
+    <ol>
+      <li>Engine receives source text and tokenizes + parses it into an AST</li>
+      <li><strong>Global Execution Context created</strong> (Creation Phase): <code>userName → undefined</code>, <code>greet → [Function]</code>, <code>message → undefined</code></li>
+      <li><strong>Global EC execution begins</strong>: <code>userName</code> assigned <code>"Alice"</code></li>
+      <li><code>greet(userName)</code> called → <strong>new Function EC pushed</strong> to call stack</li>
+      <li>greet's Creation Phase: parameter <code>name → "Alice"</code></li>
+      <li>greet's Execution Phase: returns <code>"Hello, Alice"</code> → EC popped</li>
+      <li><code>message</code> assigned <code>"Hello, Alice"</code></li>
+      <li><code>console.log</code> called → outputs <code>Hello, Alice</code></li>
+    </ol>
+
+  </div>
+
+  <div class="bottom-nav">
+    <button class="bottom-nav-btn disabled">← Previous</button>
+    <span class="bottom-nav-center">01 of 08</span>
+    <button class="bottom-nav-btn" onclick="goTo(1)">Next: Global EC →</button>
+  </div>
+</article>
+
+<!-- ════════════════════════════════════
+     PAGE 1 — Global Execution Context
+════════════════════════════════════════ -->
+<article class="topic-page" id="page-1">
+  <div class="topic-hero" data-num="02">
+    <div class="topic-eyebrow">Topic 02 of 08</div>
+    <h1>Global Execution<br>Context</h1>
+    <p class="lead">The Global Execution Context is the foundation upon which all JavaScript runs. It is created automatically when a script loads, and it exists until the script terminates.</p>
+  </div>
+
+  <div class="content-body">
+
+    <h2>What Is the Global EC?</h2>
+    <p>When the JavaScript engine begins running a script, the <strong>very first thing it does</strong> is create the Global Execution Context (GEC). This happens before any code is executed. There is exactly <strong>one GEC per script</strong>, and it lives until the browser tab is closed or the Node.js process exits.</p>
+
+    <div class="callout callout-definition">
+      <div class="callout-label">Definition</div>
+      The Global Execution Context is the default execution environment in which JavaScript code runs when it is not inside any function. It is the base context, always present at the bottom of the call stack.
+    </div>
+
+    <h2>What the GEC Contains</h2>
+    <p>Every execution context is composed of three components. For the Global EC, they are set up as follows:</p>
+
+    <div class="diagram">
+      <div class="diagram-title">Global Execution Context — internal structure</div>
+      <div class="ec-box ec-global">
+        <div class="ec-title-bar">🌍 GLOBAL EXECUTION CONTEXT</div>
+        <div class="ec-body">
+          <div class="ec-row">
+            <div class="ec-key">Variable Environment</div>
+            <div class="ec-val">All <code>var</code> declarations, function declarations at global scope</div>
+          </div>
+          <div class="ec-row">
+            <div class="ec-key">Scope Chain</div>
+            <div class="ec-val">Points to its own Variable Environment + null (no outer scope)</div>
+          </div>
+          <div class="ec-row">
+            <div class="ec-key"><code>this</code></div>
+            <div class="ec-val">Browser: <code>window</code> object &nbsp;|&nbsp; Node.js: <code>global</code> object (or <code>{}</code> in modules)</div>
+          </div>
+          <div class="ec-row">
+            <div class="ec-key">Global Object</div>
+            <div class="ec-val">Created alongside GEC. All global vars become properties of it.</div>
+          </div>
+          <div class="ec-row">
+            <div class="ec-key">Outer Environment</div>
+            <div class="ec-val"><code>null</code> — there is nothing outside global scope</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h2>The Global Object</h2>
+    <p>Alongside the GEC, the engine creates the <strong>global object</strong> (<code>window</code> in browsers, <code>global</code> in Node.js). All variables declared with <code>var</code> at the global level become properties of this object. Function declarations also become properties of the global object.</p>
+
+    <div class="code-wrap">
+      <div class="code-header"><div class="code-dots"><span class="code-dot cd-r"></span><span class="code-dot cd-y"></span><span class="code-dot cd-g"></span></div><span class="code-filename">global-object.js — browser environment</span></div>
+      <pre>
+<span class="kw">var</span> <span class="var-name">age</span> <span class="op">=</span> <span class="num">25</span>;
+<span class="kw">function</span> <span class="fn">sayHi</span>() { <span class="kw">return</span> <span class="str">"hi"</span>; }
+
+console.log(window.<span class="prop">age</span>);   <span class="cmt">// 25 — var becomes window property</span>
+console.log(window.<span class="fn">sayHi</span>); <span class="cmt">// [Function: sayHi] — same here</span>
+
+<span class="kw">let</span> <span class="var-name">name</span> <span class="op">=</span> <span class="str">"Bob"</span>;
+console.log(window.<span class="prop">name</span>);  <span class="cmt">// "" (window.name is a built-in, let/const don't attach to global obj)</span></pre>
+    </div>
+
+    <div class="callout callout-important">
+      <div class="callout-label">Important Distinction</div>
+      <code>var</code> declarations in global scope become properties of the global object. <code>let</code> and <code>const</code> declarations in global scope do <strong>not</strong> — they exist in a separate "script scope" or declarative environment record that is not the global object.
+    </div>
+
+    <h2>Two Phases of the GEC</h2>
+    <p>Like all execution contexts, the GEC is created in two phases:</p>
+
+    <div class="phase-timeline">
+      <div class="phase-block" style="background:rgba(26,107,58,0.06);border:1px solid rgba(26,107,58,0.2);border-radius:6px">
+        <div class="phase-num" style="color:var(--accent2)">Phase 1</div>
+        <div class="phase-title">Creation Phase</div>
+        <div class="phase-items" style="color:var(--ink)">
+          ① Create global object<br>
+          ② Set <code>this</code> = global obj<br>
+          ③ Scan for <code>var</code> → set to <code>undefined</code><br>
+          ④ Scan for <code>function</code> decls → store complete function<br>
+          ⑤ Build scope chain<br>
+          ⑥ Allocate heap memory for objects/arrays
+        </div>
+      </div>
+      <div class="phase-block" style="background:rgba(28,63,122,0.06);border:1px solid rgba(28,63,122,0.2);border-radius:6px;margin-top:0">
+        <div class="phase-num" style="color:var(--accent3)">Phase 2</div>
+        <div class="phase-title">Execution Phase</div>
+        <div class="phase-items" style="color:var(--ink)">
+          ① Execute code top-to-bottom<br>
+          ② Assign actual values to <code>var</code> declarations<br>
+          ③ Execute expressions<br>
+          ④ Push new EC for each function call<br>
+          ⑤ Pop EC when function returns<br>
+          ⑥ Continue until script end
+        </div>
+      </div>
+    </div>
+
+    <h2>Interactive Step-Through: GEC Creation</h2>
+    <p>Click through the steps below to watch the Global EC being built for this code:</p>
+
+    <div class="step-player" id="gec-player">
+      <div class="step-player-header">
+        <span class="step-player-title">▶ GEC Step-Through Player — Step <span id="gec-step-num">1</span> of 6</span>
+        <div class="step-controls">
+          <button class="step-btn" id="gec-prev" onclick="gecStep(-1)" disabled>← Prev</button>
+          <button class="step-btn" id="gec-next" onclick="gecStep(1)">Next →</button>
+        </div>
+      </div>
+      <div class="step-body">
+        <div class="step-code-pane" id="gec-code"></div>
+        <div class="step-state-pane" id="gec-state"></div>
+      </div>
+      <div class="step-info" id="gec-info"></div>
+    </div>
+
+    <h2>The GEC on the Call Stack</h2>
+    <p>When the GEC is created, it is <strong>immediately pushed onto the call stack</strong>. It stays at the bottom of the stack for the entire lifetime of the script. All function calls create new contexts on top of it.</p>
+
+    <div class="diagram">
+      <div class="diagram-title">Call stack state at different moments</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;text-align:center">
+        <div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:12px">AT SCRIPT START</div>
+          <div class="call-stack-visual">
+            <div class="cs-frame cs-global">Global EC</div>
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-top:8px;font-style:italic">Only GEC exists</div>
+        </div>
+        <div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:12px">DURING FUNCTION CALL</div>
+          <div class="call-stack-visual">
+            <div class="cs-label">▲ top</div>
+            <div class="cs-frame cs-f3">greet() EC</div>
+            <div class="cs-sep"></div>
+            <div class="cs-frame cs-global">Global EC</div>
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-top:8px;font-style:italic">GEC paused, greet runs</div>
+        </div>
+        <div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:12px">AFTER FUNCTION RETURNS</div>
+          <div class="call-stack-visual">
+            <div class="cs-frame cs-global">Global EC</div>
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-top:8px;font-style:italic">GEC resumes</div>
+        </div>
+      </div>
+    </div>
+
+    <h2><code>this</code> in the Global Context</h2>
+    <p>In the Global EC, <code>this</code> is set automatically by the engine:</p>
+
+    <table class="comparison-table">
+      <tr>
+        <th>Environment</th>
+        <th>Value of <code>this</code> in Global EC</th>
+        <th>Notes</th>
+      </tr>
+      <tr>
+        <td>Browser (non-strict)</td>
+        <td><code>window</code></td>
+        <td>The global Window object. All globals are its properties.</td>
+      </tr>
+      <tr>
+        <td>Browser (strict mode)</td>
+        <td><code>window</code></td>
+        <td>Strict mode doesn't change global-level <code>this</code>, only function-level.</td>
+      </tr>
+      <tr>
+        <td>Node.js (CommonJS module)</td>
+        <td><code>module.exports</code> / <code>{}</code></td>
+        <td>Each file is wrapped in a function; global <code>this</code> is the module object.</td>
+      </tr>
+      <tr>
+        <td>Node.js (global scope)</td>
+        <td><code>global</code></td>
+        <td>The global object in Node.</td>
+      </tr>
+      <tr>
+        <td>ES Module (browser/Node)</td>
+        <td><code>undefined</code></td>
+        <td>ES modules are always in strict mode; global-level <code>this</code> is undefined.</td>
+      </tr>
+    </table>
+
+  </div>
+
+  <div class="bottom-nav">
+    <button class="bottom-nav-btn" onclick="goTo(0)">← Previous</button>
+    <span class="bottom-nav-center">02 of 08</span>
+    <button class="bottom-nav-btn" onclick="goTo(2)">Next: Function EC →</button>
+  </div>
+</article>
+
+<!-- ════════════════════════════════════
+     PAGE 2 — Function Execution Context
+════════════════════════════════════════ -->
+<article class="topic-page" id="page-2">
+  <div class="topic-hero" data-num="03">
+    <div class="topic-eyebrow">Topic 03 of 08</div>
+    <h1>Function Execution<br>Context</h1>
+    <p class="lead">Every time a function is invoked, JavaScript creates a brand-new execution context just for that call. Understanding this context — what it contains, when it's created, and when it's destroyed — is the key to understanding scope, closures, and <code>this</code>.</p>
+  </div>
+
+  <div class="content-body">
+
+    <h2>Created On Every Call, Not On Every Definition</h2>
+    <p>A critical distinction: the Function Execution Context (FEC) is created when a function is <strong>called</strong>, not when it is declared. Every invocation of a function creates a <em>fresh, independent</em> execution context, even if the same function is called multiple times.</p>
+
+    <div class="code-wrap">
+      <div class="code-header"><div class="code-dots"><span class="code-dot cd-r"></span><span class="code-dot cd-y"></span><span class="code-dot cd-g"></span></div><span class="code-filename">multiple-calls.js</span></div>
+      <pre>
+<span class="kw">function</span> <span class="fn">add</span>(<span class="var-name">a</span>, <span class="var-name">b</span>) {
+  <span class="kw">let</span> <span class="var-name">result</span> <span class="op">=</span> <span class="var-name">a</span> <span class="op">+</span> <span class="var-name">b</span>;
+  <span class="kw">return</span> <span class="var-name">result</span>;
+}
+
+<span class="fn">add</span>(<span class="num">1</span>, <span class="num">2</span>);  <span class="cmt">// ← EC #1 created: {a:1, b:2, result:undefined→3}</span>
+<span class="fn">add</span>(<span class="num">5</span>, <span class="num">6</span>);  <span class="cmt">// ← EC #2 created: {a:5, b:6, result:undefined→11}</span>
+<span class="fn">add</span>(<span class="num">1</span>, <span class="num">2</span>);  <span class="cmt">// ← EC #3 created: completely independent of EC #1</span>
+
+<span class="cmt">// Each EC is separate. EC #1 and EC #3 have no connection.</span></pre>
+    </div>
+
+    <h2>Structure of a Function EC</h2>
+    <p>Every Function EC contains the same fundamental components as the Global EC, but with a key addition: it has an <strong>outer environment reference</strong> pointing to the scope where the function was <em>defined</em>.</p>
+
+    <div class="diagram">
+      <div class="diagram-title">Function Execution Context — full internal structure</div>
+      <div class="ec-box ec-func">
+        <div class="ec-title-bar">⚙️ FUNCTION EXECUTION CONTEXT — greet("Alice")</div>
+        <div class="ec-body">
+          <div class="ec-row">
+            <div class="ec-key">Arguments Object</div>
+            <div class="ec-val"><code>{ 0: "Alice", length: 1 }</code> — array-like, holds passed args</div>
+          </div>
+          <div class="ec-row">
+            <div class="ec-key">Parameters</div>
+            <div class="ec-val"><code>name = "Alice"</code> — treated like local variables</div>
+          </div>
+          <div class="ec-row">
+            <div class="ec-key">Variable Environment</div>
+            <div class="ec-val">All <code>var</code>/<code>let</code>/<code>const</code> declared inside the function body</div>
+          </div>
+          <div class="ec-row">
+            <div class="ec-key">Scope Chain</div>
+            <div class="ec-val">Own VE + outer ref → ... → Global VE</div>
+          </div>
+          <div class="ec-row">
+            <div class="ec-key">Outer Environment Ref</div>
+            <div class="ec-val">Points to the Variable Environment of the scope where this function was <strong>lexically defined</strong></div>
+          </div>
+          <div class="ec-row">
+            <div class="ec-key"><code>this</code></div>
+            <div class="ec-val">Determined by <em>how</em> the function is called (see table below)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h2>Lifetime of a Function EC</h2>
+
+    <div class="diagram">
+      <div class="diagram-title">Function EC lifecycle: from call to garbage collection</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:2">
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px dashed var(--border)">
+          <span style="background:rgba(26,107,58,0.1);border:1px solid rgba(26,107,58,0.4);color:var(--accent2);padding:4px 10px;border-radius:3px;min-width:160px;text-align:center;font-size:10px;letter-spacing:1px">1. FUNCTION CALLED</span>
+          <span style="color:var(--muted)">→</span>
+          <span style="font-size:12px">Engine creates new Function EC object in memory</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px dashed var(--border)">
+          <span style="background:rgba(28,63,122,0.1);border:1px solid rgba(28,63,122,0.4);color:var(--accent3);padding:4px 10px;border-radius:3px;min-width:160px;text-align:center;font-size:10px;letter-spacing:1px">2. CREATION PHASE</span>
+          <span style="color:var(--muted)">→</span>
+          <span style="font-size:12px">Vars hoisted, scope chain set, <code>this</code> bound, <code>arguments</code> built</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px dashed var(--border)">
+          <span style="background:rgba(122,79,28,0.1);border:1px solid rgba(122,79,28,0.4);color:var(--accent4);padding:4px 10px;border-radius:3px;min-width:160px;text-align:center;font-size:10px;letter-spacing:1px">3. PUSHED TO STACK</span>
+          <span style="color:var(--muted)">→</span>
+          <span style="font-size:12px">EC placed on top of call stack. Becomes the "currently running" context</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px dashed var(--border)">
+          <span style="background:rgba(192,57,43,0.1);border:1px solid rgba(192,57,43,0.4);color:var(--accent);padding:4px 10px;border-radius:3px;min-width:160px;text-align:center;font-size:10px;letter-spacing:1px">4. EXECUTION PHASE</span>
+          <span style="color:var(--muted)">→</span>
+          <span style="font-size:12px">Code inside function runs line by line. Values assigned. Calls nested functions.</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px dashed var(--border)">
+          <span style="background:rgba(0,0,0,0.05);border:1px solid var(--border);color:var(--ink);padding:4px 10px;border-radius:3px;min-width:160px;text-align:center;font-size:10px;letter-spacing:1px">5. RETURN / END</span>
+          <span style="color:var(--muted)">→</span>
+          <span style="font-size:12px">Function returns (explicitly or implicitly returns <code>undefined</code>)</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px dashed var(--border)">
+          <span style="background:rgba(0,0,0,0.05);border:1px solid var(--border);color:var(--muted);padding:4px 10px;border-radius:3px;min-width:160px;text-align:center;font-size:10px;letter-spacing:1px">6. POPPED FROM STACK</span>
+          <span style="color:var(--muted)">→</span>
+          <span style="font-size:12px">EC removed from call stack. Previous EC resumes.</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 0">
+          <span style="background:rgba(0,0,0,0.05);border:1px dashed var(--border);color:var(--muted);padding:4px 10px;border-radius:3px;min-width:160px;text-align:center;font-size:10px;letter-spacing:1px">7. GC ELIGIBLE*</span>
+          <span style="color:var(--muted)">→</span>
+          <span style="font-size:12px">EC memory freed <em>unless</em> a closure holds a reference to its variable env</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout callout-note">
+      <div class="callout-label">Note on Closures</div>
+      Step 7 has an asterisk for a reason. If a function defined inside another function still holds a reference to the outer function's variable environment (via the scope chain), that variable environment <strong>cannot be garbage collected</strong>. This is the mechanism behind closures.
+    </div>
+
+    <h2><code>this</code> in Function Contexts</h2>
+    <p>Unlike the Global EC where <code>this</code> is always the global object, the value of <code>this</code> inside a function depends entirely on <strong>how the function is called</strong>:</p>
+
+    <table class="comparison-table">
+      <tr>
+        <th>Call Syntax</th>
+        <th><code>this</code> value</th>
+        <th>Example</th>
+      </tr>
+      <tr>
+        <td>Regular function call</td>
+        <td><code>undefined</code> (strict) / <code>window</code> (non-strict)</td>
+        <td><code>fn()</code></td>
+      </tr>
+      <tr>
+        <td>Method call</td>
+        <td>The object before the dot</td>
+        <td><code>obj.method()</code></td>
+      </tr>
+      <tr>
+        <td><code>new</code> call</td>
+        <td>The newly created object</td>
+        <td><code>new Fn()</code></td>
+      </tr>
+      <tr>
+        <td><code>call</code> / <code>apply</code></td>
+        <td>First argument passed explicitly</td>
+        <td><code>fn.call(ctx)</code></td>
+      </tr>
+      <tr>
+        <td>Arrow function</td>
+        <td>Inherited from enclosing lexical context (no own <code>this</code>)</td>
+        <td><code>const f = () => {}</code></td>
+      </tr>
+    </table>
+
+    <h2>GEC vs Function EC — Side-by-Side</h2>
+    <table class="comparison-table">
+      <tr>
+        <th>Property</th>
+        <th>Global EC</th>
+        <th>Function EC</th>
+      </tr>
+      <tr>
+        <td>How many exist?</td>
+        <td>Exactly one per script</td>
+        <td>One per function <em>call</em> (many possible)</td>
+      </tr>
+      <tr>
+        <td>When created?</td>
+        <td>When script first loads</td>
+        <td>When function is invoked</td>
+      </tr>
+      <tr>
+        <td>When destroyed?</td>
+        <td>When script/tab closes</td>
+        <td>When function returns (unless closured)</td>
+      </tr>
+      <tr>
+        <td>Outer environment</td>
+        <td><code>null</code> (no outer)</td>
+        <td>The scope where function was defined</td>
+      </tr>
+      <tr>
+        <td><code>arguments</code> object</td>
+        <td>Not available</td>
+        <td>Available (except in arrow functions)</td>
+      </tr>
+      <tr>
+        <td>Creates global object?</td>
+        <td>Yes</td>
+        <td>No</td>
+      </tr>
+      <tr>
+        <td><code>this</code> value</td>
+        <td>Global object (window/global)</td>
+        <td>Depends on call site</td>
+      </tr>
+    </table>
+
+  </div>
+
+  <div class="bottom-nav">
+    <button class="bottom-nav-btn" onclick="goTo(1)">← Previous</button>
+    <span class="bottom-nav-center">03 of 08</span>
+    <button class="bottom-nav-btn" onclick="goTo(3)">Next: Call Stack →</button>
+  </div>
+</article>
+
+<!-- ════════════════════════════════════
+     PAGE 3 — Call Stack Mechanics
+════════════════════════════════════════ -->
+<article class="topic-page" id="page-3">
+  <div class="topic-hero" data-num="04">
+    <div class="topic-eyebrow">Topic 04 of 08</div>
+    <h1>Call Stack Mechanics<br>& Visualization</h1>
+    <p class="lead">The call stack is the engine's bookkeeper — it tracks exactly which function is running and what to do when it finishes. Mastering the call stack means you can mentally simulate any JavaScript program's execution.</p>
+  </div>
+
+  <div class="content-body">
+
+    <h2>What Is the Call Stack?</h2>
+    <p>The <strong>call stack</strong> (also called the execution stack or runtime stack) is a data structure that records the order in which functions are called. It works as a strict <strong>Last In, First Out (LIFO)</strong> stack: the most recently called function is always the one currently executing, and when it returns, the previous function resumes.</p>
+
+    <div class="callout callout-analogy">
+      <div class="callout-label">Analogy</div>
+      Imagine a stack of plates. You can only add to the top or remove from the top. When greet() calls getName(), getName() goes on top. When getName() returns, it's lifted off and greet() is on top again. The Global EC is the heavy plate always at the bottom.
+    </div>
+
+    <h2>The Four Rules of the Call Stack</h2>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:20px 0">
+      <div style="border:1px solid var(--border);border-radius:6px;padding:20px">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:8px">Rule 1</div>
+        <div style="font-weight:600;margin-bottom:6px">Global EC starts at bottom</div>
+        <div style="font-size:13px;color:var(--muted)">The Global EC is always the first frame. It is never popped until the script ends.</div>
+      </div>
+      <div style="border:1px solid var(--border);border-radius:6px;padding:20px">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--accent3);margin-bottom:8px">Rule 2</div>
+        <div style="font-weight:600;margin-bottom:6px">Every call pushes a frame</div>
+        <div style="font-size:13px;color:var(--muted)">When a function is invoked, a new EC is created and pushed onto the stack.</div>
+      </div>
+      <div style="border:1px solid var(--border);border-radius:6px;padding:20px">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--accent2);margin-bottom:8px">Rule 3</div>
+        <div style="font-weight:600;margin-bottom:6px">Only the top frame executes</div>
+        <div style="font-size:13px;color:var(--muted)">The function at the top of the stack is the "currently executing" context. All others are paused.</div>
+      </div>
+      <div style="border:1px solid var(--border);border-radius:6px;padding:20px">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--accent4);margin-bottom:8px">Rule 4</div>
+        <div style="font-weight:600;margin-bottom:6px">Return pops the frame</div>
+        <div style="font-size:13px;color:var(--muted)">When a function returns, its EC is removed. The frame below it becomes the new top and resumes.</div>
+      </div>
+    </div>
+
+    <h2>Full Worked Example — Visualized at Each Step</h2>
+
+    <div class="code-wrap">
+      <div class="code-header"><div class="code-dots"><span class="code-dot cd-r"></span><span class="code-dot cd-y"></span><span class="code-dot cd-g"></span></div><span class="code-filename">call-stack-demo.js</span></div>
+      <pre>
+<span class="kw">function</span> <span class="fn">multiply</span>(<span class="var-name">a</span>, <span class="var-name">b</span>) {        <span class="cmt">// Line 1</span>
+  <span class="kw">return</span> <span class="var-name">a</span> <span class="op">*</span> <span class="var-name">b</span>;                 <span class="cmt">// Line 2</span>
+}                                  <span class="cmt">// Line 3</span>
+                                   <span class="cmt">// Line 4</span>
+<span class="kw">function</span> <span class="fn">square</span>(<span class="var-name">n</span>) {             <span class="cmt">// Line 5</span>
+  <span class="kw">return</span> <span class="fn">multiply</span>(<span class="var-name">n</span>, <span class="var-name">n</span>);        <span class="cmt">// Line 6</span>
+}                                  <span class="cmt">// Line 7</span>
+                                   <span class="cmt">// Line 8</span>
+<span class="kw">function</span> <span class="fn">printSquare</span>(<span class="var-name">n</span>) {       <span class="cmt">// Line 9</span>
+  <span class="kw">const</span> <span class="var-name">sq</span> <span class="op">=</span> <span class="fn">square</span>(<span class="var-name">n</span>);          <span class="cmt">// Line 10</span>
+  console.log(<span class="var-name">sq</span>);               <span class="cmt">// Line 11</span>
+}                                  <span class="cmt">// Line 12</span>
+                                   <span class="cmt">// Line 13</span>
+<span class="fn">printSquare</span>(<span class="num">4</span>);                   <span class="cmt">// Line 14</span></pre>
+    </div>
+
+    <div class="diagram">
+      <div class="diagram-title">Call stack evolution — 7 snapshots</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;font-size:12px">
+
+        <div style="text-align:center">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:8px;letter-spacing:1px">AFTER LINE 13<br>(before call)</div>
+          <div class="call-stack-visual">
+            <div class="cs-frame cs-global" style="font-size:11px">Global EC</div>
+          </div>
+        </div>
+
+        <div style="text-align:center">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:8px;letter-spacing:1px">LINE 14<br>printSquare called</div>
+          <div class="call-stack-visual">
+            <div class="cs-label" style="padding-left:0;align-self:center">▲ top</div>
+            <div class="cs-frame cs-f3" style="font-size:11px">printSquare(4)</div>
+            <div class="cs-sep"></div>
+            <div class="cs-frame cs-global" style="font-size:11px">Global EC</div>
+          </div>
+        </div>
+
+        <div style="text-align:center">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:8px;letter-spacing:1px">LINE 10<br>square called</div>
+          <div class="call-stack-visual">
+            <div class="cs-label" style="padding-left:0;align-self:center">▲ top</div>
+            <div class="cs-frame cs-f2" style="font-size:11px">square(4)</div>
+            <div class="cs-sep"></div>
+            <div class="cs-frame cs-f3" style="font-size:11px">printSquare(4)</div>
+            <div class="cs-sep"></div>
+            <div class="cs-frame cs-global" style="font-size:11px">Global EC</div>
+          </div>
+        </div>
+
+        <div style="text-align:center">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:8px;letter-spacing:1px">LINE 6<br>multiply called<br><strong style="color:var(--accent)">PEAK DEPTH</strong></div>
+          <div class="call-stack-visual">
+            <div class="cs-label" style="padding-left:0;align-self:center">▲ top</div>
+            <div class="cs-frame cs-f1" style="font-size:11px">multiply(4,4)</div>
+            <div class="cs-sep"></div>
+            <div class="cs-frame cs-f2" style="font-size:11px">square(4)</div>
+            <div class="cs-sep"></div>
+            <div class="cs-frame cs-f3" style="font-size:11px">printSquare(4)</div>
+            <div class="cs-sep"></div>
+            <div class="cs-frame cs-global" style="font-size:11px">Global EC</div>
+          </div>
+        </div>
+
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;font-size:12px;margin-top:24px">
+        <div style="text-align:center">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:8px;letter-spacing:1px">LINE 2<br>multiply returns 16</div>
+          <div class="call-stack-visual">
+            <div class="cs-label" style="padding-left:0;align-self:center">▲ top</div>
+            <div class="cs-frame cs-f2" style="font-size:11px">square(4)</div>
+            <div class="cs-sep"></div>
+            <div class="cs-frame cs-f3" style="font-size:11px">printSquare(4)</div>
+            <div class="cs-sep"></div>
+            <div class="cs-frame cs-global" style="font-size:11px">Global EC</div>
+          </div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:8px;letter-spacing:1px">LINE 6<br>square returns 16</div>
+          <div class="call-stack-visual">
+            <div class="cs-label" style="padding-left:0;align-self:center">▲ top</div>
+            <div class="cs-frame cs-f3" style="font-size:11px">printSquare(4)</div>
+            <div class="cs-sep"></div>
+            <div class="cs-frame cs-global" style="font-size:11px">Global EC</div>
+          </div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:8px;letter-spacing:1px">LINE 12<br>printSquare returns</div>
+          <div class="call-stack-visual">
+            <div class="cs-frame cs-global" style="font-size:11px">Global EC</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h2>Stack Overflow</h2>
+    <p>The call stack has a finite size (typically ~10,000–15,000 frames depending on the browser and system). If function calls keep pushing frames without any returning (usually due to infinite recursion), the stack fills up and the engine throws a <code>RangeError: Maximum call stack size exceeded</code>.</p>
+
+    <div class="code-wrap">
+      <div class="code-header"><div class="code-dots"><span class="code-dot cd-r"></span><span class="code-dot cd-y"></span><span class="code-dot cd-g"></span></div><span class="code-filename">stack-overflow.js</span></div>
+      <pre>
+<span class="kw">function</span> <span class="fn">recurse</span>() {
+  <span class="fn">recurse</span>(); <span class="cmt">// no base case — pushes forever</span>
+}
+<span class="fn">recurse</span>(); <span class="cmt">// → RangeError: Maximum call stack size exceeded</span>
+
+<span class="cmt">// Fix: always have a base case in recursive functions</span>
+<span class="kw">function</span> <span class="fn">countDown</span>(<span class="var-name">n</span>) {
+  <span class="kw">if</span> (<span class="var-name">n</span> <span class="op">===</span> <span class="num">0</span>) <span class="kw">return</span>;      <span class="cmt">// ← base case stops recursion</span>
+  console.log(<span class="var-name">n</span>);
+  <span class="fn">countDown</span>(<span class="var-name">n</span> <span class="op">-</span> <span class="num">1</span>);
+}</pre>
+    </div>
+
+    <h2>Reading Call Stack in DevTools</h2>
+    <p>In Chrome/Firefox DevTools, when you hit a breakpoint or an error, the <strong>Call Stack panel</strong> shows the live call stack. The topmost entry is the currently paused function. Reading from top to bottom traces the chain of calls that led here.</p>
+
+    <div class="callout callout-note">
+      <div class="callout-label">DevTools Tip</div>
+      Place a <code>debugger;</code> statement in your code. When DevTools is open, execution pauses there and you can inspect the full call stack, local variables for each frame, and step line by line. This is the most powerful way to build intuition for the execution model.
+    </div>
+
+  </div>
+
+  <div class="bottom-nav">
+    <button class="bottom-nav-btn" onclick="goTo(2)">← Previous</button>
+    <span class="bottom-nav-center">04 of 08</span>
+    <button class="bottom-nav-btn" onclick="goTo(4)">Next: Parsing & Execution →</button>
+  </div>
+</article>
+
+<!-- ════════════════════════════════════
+     PAGE 4 — Parsing and Execution
+════════════════════════════════════════ -->
+<article class="topic-page" id="page-4">
+  <div class="topic-hero" data-num="05">
+    <div class="topic-eyebrow">Topic 05 of 08</div>
+    <h1>How JavaScript Code<br>Is Parsed & Executed</h1>
+    <p class="lead">Your source code text travels through a multi-stage pipeline before a single instruction runs. Understanding this pipeline explains syntax errors, hoisting, and the difference between compile-time and runtime behavior.</p>
+  </div>
+
+  <div class="content-body">
+
+    <h2>Stage 1 — Tokenization (Lexing)</h2>
+    <p>The raw source code string is fed into the <strong>lexer</strong> (tokenizer). The lexer reads characters left-to-right and groups them into meaningful <strong>tokens</strong> — the atomic units of the language.</p>
+
+    <div class="diagram">
+      <div class="diagram-title">Source text → token stream</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:13px">
+        <div style="padding:12px 16px;background:var(--code-bg);color:var(--code-text);border-radius:4px;margin-bottom:16px">
+          <span style="color:#4a6070">Source: </span><span class="kw" style="color:#c792ea">var</span> <span style="color:#ffcb6b">x</span> <span style="color:#89ddff">=</span> <span style="color:#f78c6c">5</span> <span style="color:#89ddff">+</span> <span style="color:#f78c6c">3</span><span style="color:#89ddff">;</span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;padding:16px;background:#fafaf7;border:1px solid var(--border);border-radius:4px">
+          <div style="text-align:center">
+            <div style="padding:8px 12px;background:rgba(192,57,43,0.1);border:1px solid rgba(192,57,43,0.4);border-radius:4px;font-size:13px;color:var(--accent)">var</div>
+            <div style="font-size:9px;color:var(--muted);margin-top:4px;letter-spacing:1px">KEYWORD</div>
+          </div>
+          <div style="text-align:center">
+            <div style="padding:8px 12px;background:rgba(122,79,28,0.1);border:1px solid rgba(122,79,28,0.4);border-radius:4px;font-size:13px;color:var(--accent4)">x</div>
+            <div style="font-size:9px;color:var(--muted);margin-top:4px;letter-spacing:1px">IDENTIFIER</div>
+          </div>
+          <div style="text-align:center">
+            <div style="padding:8px 12px;background:rgba(28,63,122,0.1);border:1px solid rgba(28,63,122,0.4);border-radius:4px;font-size:13px;color:var(--accent3)">=</div>
+            <div style="font-size:9px;color:var(--muted);margin-top:4px;letter-spacing:1px">OPERATOR</div>
+          </div>
+          <div style="text-align:center">
+            <div style="padding:8px 12px;background:rgba(26,107,58,0.1);border:1px solid rgba(26,107,58,0.4);border-radius:4px;font-size:13px;color:var(--accent2)">5</div>
+            <div style="font-size:9px;color:var(--muted);margin-top:4px;letter-spacing:1px">NUMBER</div>
+          </div>
+          <div style="text-align:center">
+            <div style="padding:8px 12px;background:rgba(28,63,122,0.1);border:1px solid rgba(28,63,122,0.4);border-radius:4px;font-size:13px;color:var(--accent3)">+</div>
+            <div style="font-size:9px;color:var(--muted);margin-top:4px;letter-spacing:1px">OPERATOR</div>
+          </div>
+          <div style="text-align:center">
+            <div style="padding:8px 12px;background:rgba(26,107,58,0.1);border:1px solid rgba(26,107,58,0.4);border-radius:4px;font-size:13px;color:var(--accent2)">3</div>
+            <div style="font-size:9px;color:var(--muted);margin-top:4px;letter-spacing:1px">NUMBER</div>
+          </div>
+          <div style="text-align:center">
+            <div style="padding:8px 12px;background:rgba(0,0,0,0.05);border:1px solid var(--border);border-radius:4px;font-size:13px;color:var(--muted)">;</div>
+            <div style="font-size:9px;color:var(--muted);margin-top:4px;letter-spacing:1px">PUNCT</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h2>Stage 2 — Parsing (AST Construction)</h2>
+    <p>The token stream is fed into the <strong>parser</strong>, which checks tokens against JavaScript's grammar rules and constructs an <strong>Abstract Syntax Tree (AST)</strong>. The AST is a tree-shaped representation of the code's structure, with no extraneous syntax characters.</p>
+    <p>Syntax errors are caught here. If the grammar rules are violated (e.g. <code>var = 5</code>), the parser throws a <code>SyntaxError</code> <em>before any code runs</em>.</p>
+
+    <div class="diagram">
+      <div class="diagram-title">AST for: var x = 5 + 3;</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;text-align:center">
+        <div style="display:inline-block;padding:10px 18px;border:2px solid var(--accent);border-radius:6px;color:var(--accent);background:rgba(192,57,43,0.06)">VariableDeclaration<br><span style="font-size:10px;opacity:0.7">kind: "var"</span></div>
+        <div style="margin:8px 0;color:var(--muted)">│</div>
+        <div style="display:inline-block;padding:10px 18px;border:2px solid var(--accent3);border-radius:6px;color:var(--accent3);background:rgba(28,63,122,0.06)">VariableDeclarator<br><span style="font-size:10px;opacity:0.7">id: "x"</span></div>
+        <div style="margin:8px 0;color:var(--muted)">│</div>
+        <div style="display:inline-block;padding:10px 18px;border:2px solid var(--accent4);border-radius:6px;color:var(--accent4);background:rgba(122,79,28,0.06)">BinaryExpression<br><span style="font-size:10px;opacity:0.7">operator: "+"</span></div>
+        <div style="display:flex;justify-content:center;gap:60px;margin-top:8px">
+          <div>
+            <div style="margin-bottom:4px;color:var(--muted)">│</div>
+            <div style="display:inline-block;padding:8px 14px;border:2px solid var(--accent2);border-radius:6px;color:var(--accent2);background:rgba(26,107,58,0.06)">NumericLiteral<br><span style="font-size:10px;opacity:0.7">value: 5</span></div>
+          </div>
+          <div>
+            <div style="margin-bottom:4px;color:var(--muted)">│</div>
+            <div style="display:inline-block;padding:8px 14px;border:2px solid var(--accent2);border-radius:6px;color:var(--accent2);background:rgba(26,107,58,0.06)">NumericLiteral<br><span style="font-size:10px;opacity:0.7">value: 3</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout callout-important">
+      <div class="callout-label">Why This Matters for Hoisting</div>
+      The parser sees the entire source before execution begins. During AST construction, the engine <em>knows</em> every variable and function declaration in each scope. This scan result is what enables the creation phase to hoist declarations before code runs.
+    </div>
+
+    <h2>Stage 3 — Compilation to Bytecode</h2>
+    <p>Modern engines (V8, SpiderMonkey) don't interpret the AST directly. They compile it to an intermediate <strong>bytecode</strong> representation, then execute that. Hot code paths are further compiled to optimized machine code by a JIT compiler (V8 uses Ignition + TurboFan).</p>
+    <p>As a developer, you don't interact with this stage directly, but it's why JavaScript performance has improved dramatically — the engine can optimize repetitive patterns.</p>
+
+    <h2>Stage 4 — Execution</h2>
+    <p>Now the compiled code actually runs. The engine:</p>
+    <ol>
+      <li>Creates the Global EC (with Creation Phase)</li>
+      <li>Pushes it to the call stack</li>
+      <li>Begins executing the bytecode top-to-bottom</li>
+      <li>For each function call: creates a new EC, pushes it, runs it, pops it on return</li>
+    </ol>
+
+    <h2>Syntax Errors vs Runtime Errors</h2>
+    <p>Because parsing happens before execution, understanding which errors come from which stage is important:</p>
+
+    <table class="comparison-table">
+      <tr>
+        <th>Error Type</th>
+        <th>When Caught</th>
+        <th>Example</th>
+        <th>Entire Script Runs?</th>
+      </tr>
+      <tr>
+        <td><code>SyntaxError</code></td>
+        <td>Parsing stage — before any line runs</td>
+        <td><code>var = 5;</code> / unclosed <code>{</code></td>
+        <td>No — nothing executes</td>
+      </tr>
+      <tr>
+        <td><code>ReferenceError</code></td>
+        <td>Execution stage — at the problematic line</td>
+        <td><code>console.log(undeclaredVar)</code></td>
+        <td>Yes, up to that line</td>
+      </tr>
+      <tr>
+        <td><code>TypeError</code></td>
+        <td>Execution stage — at the problematic line</td>
+        <td><code>null.property</code></td>
+        <td>Yes, up to that line</td>
+      </tr>
+      <tr>
+        <td><code>RangeError</code></td>
+        <td>Execution stage — when limit exceeded</td>
+        <td>Stack overflow / invalid array length</td>
+        <td>Yes, up to that point</td>
+      </tr>
+    </table>
+
+    <h2>The Event Loop Connection</h2>
+    <p>The execution model described so far covers <em>synchronous</em> code. But JavaScript also handles asynchronous operations. The <strong>event loop</strong> sits outside the call stack and feeds callbacks into it when the stack is empty. Understanding the call stack makes the event loop intuitive: async callbacks never interrupt running code, they wait for the stack to clear.</p>
+
+    <div class="callout callout-note">
+      <div class="callout-label">Scope of This Guide</div>
+      The event loop is a natural continuation of the execution model study. It's not covered here but is covered in the JS concurrency model — worth studying after mastering these 8 topics.
+    </div>
+
+  </div>
+
+  <div class="bottom-nav">
+    <button class="bottom-nav-btn" onclick="goTo(3)">← Previous</button>
+    <span class="bottom-nav-center">05 of 08</span>
+    <button class="bottom-nav-btn" onclick="goTo(5)">Next: Creation vs Execution Phase →</button>
+  </div>
+</article>
+
+<!-- ════════════════════════════════════
+     PAGE 5 — Creation vs Execution Phase
+════════════════════════════════════════ -->
+<article class="topic-page" id="page-5">
+  <div class="topic-hero" data-num="06">
+    <div class="topic-eyebrow">Topic 06 of 08</div>
+    <h1>Creation Phase vs<br>Execution Phase</h1>
+    <p class="lead">Every execution context — global or function — is created in two passes over the code. The first pass sets up the environment. The second pass runs the instructions. Hoisting, temporal dead zones, and closure binding all flow from these two phases.</p>
+  </div>
+
+  <div class="content-body">
+
+    <h2>The Two-Phase Model</h2>
+    <p>When an execution context is created (whether for the global scope or a function call), the engine performs two distinct passes:</p>
+
+    <div class="diagram">
+      <div class="diagram-title">Two-phase execution context creation</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--border);border-radius:6px;overflow:hidden">
+        <div style="padding:28px;background:rgba(26,107,58,0.04);border-right:1px solid var(--border)">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--accent2);margin-bottom:12px">Phase 1 — Creation</div>
+          <div style="font-family:'Fraunces',serif;font-size:1.2rem;font-weight:600;margin-bottom:16px">Memory Setup</div>
+          <div style="font-size:13.5px;line-height:1.9;color:var(--ink)">
+            <p>The engine <strong>scans the entire function body</strong> (or script) and sets up memory <em>before running</em> any code:</p>
+            <ul style="padding-left:20px;margin-top:8px">
+              <li><code>var</code> declarations → created, initialized to <code>undefined</code></li>
+              <li><code>let</code> / <code>const</code> → created, placed in Temporal Dead Zone (uninitialized)</li>
+              <li>Function declarations → stored <strong>completely</strong> (name + body)</li>
+              <li>Function parameters → created, assigned argument values</li>
+              <li>Outer environment reference → set (scope chain begins)</li>
+              <li><code>this</code> → bound</li>
+              <li><code>arguments</code> object → built (function ECs only)</li>
+            </ul>
+          </div>
+        </div>
+        <div style="padding:28px;background:rgba(28,63,122,0.04)">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--accent3);margin-bottom:12px">Phase 2 — Execution</div>
+          <div style="font-family:'Fraunces',serif;font-size:1.2rem;font-weight:600;margin-bottom:16px">Code Runs</div>
+          <div style="font-size:13.5px;line-height:1.9;color:var(--ink)">
+            <p>The engine runs through the code <strong>top to bottom, line by line</strong>:</p>
+            <ul style="padding-left:20px;margin-top:8px">
+              <li><code>var</code> assignments → actual values written over <code>undefined</code></li>
+              <li><code>let</code> / <code>const</code> → initialized when declaration line reached</li>
+              <li>Expressions evaluated</li>
+              <li>Conditions tested, loops executed</li>
+              <li>Function calls → new EC created, pushed to stack</li>
+              <li>Return values propagated back to caller</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h2>Hoisting — The Visible Effect of Creation Phase</h2>
+    <p>Hoisting is the name given to the observable behavior that arises from the creation phase. It's not that declarations are physically moved — it's that they are registered in memory <em>before</em> the execution phase begins, making them accessible (in some form) before their written position in the source.</p>
+
+    <div class="code-wrap">
+      <div class="code-header"><div class="code-dots"><span class="code-dot cd-r"></span><span class="code-dot cd-y"></span><span class="code-dot cd-g"></span></div><span class="code-filename">hoisting-demo.js — creation phase shown first</span></div>
+      <pre>
+<span class="cmt">// ── CREATION PHASE of Global EC ──────────────</span>
+<span class="cmt">// Engine scans and sets up in memory:</span>
+<span class="cmt">// greeting    → undefined  (var hoisted)</span>
+<span class="cmt">// result      → undefined  (var hoisted)</span>
+<span class="cmt">// message     → [TDZ]      (let — not initialized)</span>
+<span class="cmt">// sayHello    → [Function] (function declaration — fully stored!)</span>
+
+<span class="cmt">// ── EXECUTION PHASE begins ───────────────────</span>
+console.log(<span class="fn">sayHello</span>());   <span class="cmt">// "Hello!" — works! fn was in memory</span>
+console.log(<span class="var-name">greeting</span>);    <span class="cmt">// undefined — var exists but not assigned yet</span>
+<span class="cmt">// console.log(message);  // ReferenceError — let is in TDZ</span>
+
+<span class="kw">var</span> <span class="var-name">greeting</span> <span class="op">=</span> <span class="str">"Hi"</span>;        <span class="cmt">// now greeting = "Hi"</span>
+<span class="kw">let</span> <span class="var-name">message</span> <span class="op">=</span> <span class="str">"Hey"</span>;         <span class="cmt">// now message initialized = "Hey"</span>
+<span class="kw">var</span> <span class="var-name">result</span> <span class="op">=</span> <span class="fn">sayHello</span>();    <span class="cmt">// "Hello!" — still works</span>
+
+<span class="kw">function</span> <span class="fn">sayHello</span>() {
+  <span class="kw">return</span> <span class="str">"Hello!"</span>;
+}</pre>
+    </div>
+
+    <h2>Temporal Dead Zone (TDZ) — A Creation Phase Artifact</h2>
+    <p>The <strong>Temporal Dead Zone</strong> is the period between the start of a block and the point where a <code>let</code> or <code>const</code> declaration is reached. During this period, the binding <em>exists</em> in the variable environment (created in the creation phase) but is <strong>not initialized</strong>. Accessing it throws a <code>ReferenceError</code>.</p>
+
+    <div class="diagram">
+      <div class="diagram-title">Temporal Dead Zone for <code>let</code> / <code>const</code></div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;border:1px solid var(--border);border-radius:6px;overflow:hidden">
+        <div style="padding:12px 16px;display:flex;gap:0;background:#fafaf7">
+          <div style="flex:1;padding:8px 12px;background:rgba(192,57,43,0.08);border:1px solid rgba(192,57,43,0.3);border-radius:4px;color:var(--accent);font-size:11px;text-align:center">
+            <div style="font-weight:600;margin-bottom:4px">🚫 TDZ ZONE</div>
+            <div style="opacity:0.8">Binding exists but uninitialized<br>Accessing → ReferenceError</div>
+          </div>
+          <div style="padding:8px;display:flex;align-items:center;color:var(--muted);font-size:16px">→</div>
+          <div style="flex:0 0 auto;padding:8px 12px;background:rgba(28,63,122,0.08);border:1px solid rgba(28,63,122,0.3);border-radius:4px;color:var(--accent3);font-size:11px;text-align:center">
+            <div style="font-weight:600;margin-bottom:4px">let x = 5;</div>
+            <div style="opacity:0.8">Declaration line reached<br>TDZ ends, x = 5</div>
+          </div>
+          <div style="padding:8px;display:flex;align-items:center;color:var(--muted);font-size:16px">→</div>
+          <div style="flex:1;padding:8px 12px;background:rgba(26,107,58,0.08);border:1px solid rgba(26,107,58,0.3);border-radius:4px;color:var(--accent2);font-size:11px;text-align:center">
+            <div style="font-weight:600;margin-bottom:4px">✅ LIVE BINDING</div>
+            <div style="opacity:0.8">x is accessible<br>Normal usage</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h2>Creation Phase Details — By Declaration Type</h2>
+
+    <table class="comparison-table">
+      <tr>
+        <th>Declaration Type</th>
+        <th>Creation Phase</th>
+        <th>Before Declaration Line</th>
+        <th>After Declaration Line</th>
+      </tr>
+      <tr>
+        <td><code>var x = 5</code></td>
+        <td>Created, initialized to <code>undefined</code></td>
+        <td><code>undefined</code> — no error</td>
+        <td><code>5</code></td>
+      </tr>
+      <tr>
+        <td><code>let x = 5</code></td>
+        <td>Created, <strong>NOT</strong> initialized (TDZ)</td>
+        <td><code>ReferenceError</code></td>
+        <td><code>5</code></td>
+      </tr>
+      <tr>
+        <td><code>const x = 5</code></td>
+        <td>Created, <strong>NOT</strong> initialized (TDZ)</td>
+        <td><code>ReferenceError</code></td>
+        <td><code>5</code> (cannot reassign)</td>
+      </tr>
+      <tr>
+        <td><code>function fn() {}</code></td>
+        <td>Created <em>and</em> initialized with full function body</td>
+        <td>Fully callable — <code>[Function: fn]</code></td>
+        <td>Fully callable</td>
+      </tr>
+      <tr>
+        <td><code>var fn = function() {}</code></td>
+        <td>Name created, initialized to <code>undefined</code></td>
+        <td><code>undefined</code> — calling it throws <code>TypeError</code></td>
+        <td>Callable function</td>
+      </tr>
+      <tr>
+        <td><code>const fn = () => {}</code></td>
+        <td>Created, NOT initialized (TDZ)</td>
+        <td><code>ReferenceError</code></td>
+        <td>Callable arrow function</td>
+      </tr>
+    </table>
+
+    <h2>The Critical Insight</h2>
+
+    <div class="callout callout-definition">
+      <div class="callout-label">Core Mental Model</div>
+      The creation phase explains <strong>why</strong> you can call a function declaration before its written position (it was fully stored in phase 1), why <code>var</code> variables appear as <code>undefined</code> before their assignment (hoisted but not yet assigned), and why <code>let</code>/<code>const</code> throw errors before their declaration (TDZ, not yet initialized in phase 1).
+    </div>
+
+  </div>
+
+  <div class="bottom-nav">
+    <button class="bottom-nav-btn" onclick="goTo(4)">← Previous</button>
+    <span class="bottom-nav-center">06 of 08</span>
+    <button class="bottom-nav-btn" onclick="goTo(6)">Next: Variable Environment →</button>
+  </div>
+</article>
+
+<!-- ════════════════════════════════════
+     PAGE 6 — Variable Environment
+════════════════════════════════════════ -->
+<article class="topic-page" id="page-6">
+  <div class="topic-hero" data-num="07">
+    <div class="topic-eyebrow">Topic 07 of 08</div>
+    <h1>Variable Environment<br>Concept</h1>
+    <p class="lead">The variable environment is the actual data structure where identifiers and their values live inside an execution context. Understanding its internal mechanics explains identifier resolution, closures, and block scoping.</p>
+  </div>
+
+  <div class="content-body">
+
+    <h2>What Is the Variable Environment?</h2>
+    <p>Every execution context contains a <strong>variable environment</strong> — an object-like structure that stores all the variable bindings (identifier → value mappings) for that context. When you declare a variable or function, you are adding an entry to the variable environment of the current execution context.</p>
+
+    <div class="callout callout-definition">
+      <div class="callout-label">Specification Term</div>
+      In the ECMAScript specification, this is formally called an <strong>Environment Record</strong>. The Variable Environment is a reference to an Environment Record. Modern JS (ES6+) actually has two records per context: the <em>Variable Environment</em> (for <code>var</code>) and the <em>Lexical Environment</em> (for <code>let</code>/<code>const</code> and blocks). Conceptually, treat them as "the place where this context's variables live."
+    </div>
+
+    <h2>Environment Record Types</h2>
+    <p>The spec defines several types of environment records, each serving a different purpose:</p>
+
+    <table class="comparison-table">
+      <tr>
+        <th>Record Type</th>
+        <th>Where Used</th>
+        <th>What It Stores</th>
+      </tr>
+      <tr>
+        <td><strong>Global Environment Record</strong></td>
+        <td>Global EC</td>
+        <td>Global <code>var</code> bindings (Object Record) + <code>let</code>/<code>const</code> (Declarative Record) + global object</td>
+      </tr>
+      <tr>
+        <td><strong>Function Environment Record</strong></td>
+        <td>Function EC</td>
+        <td>Parameters, local <code>var</code>/<code>let</code>/<code>const</code>, function declarations, <code>arguments</code>, <code>this</code></td>
+      </tr>
+      <tr>
+        <td><strong>Block Environment Record</strong></td>
+        <td>Block <code>{}</code> with <code>let</code>/<code>const</code></td>
+        <td>Only <code>let</code>/<code>const</code> declared inside that block</td>
+      </tr>
+      <tr>
+        <td><strong>Module Environment Record</strong></td>
+        <td>ES Module</td>
+        <td>Module-level bindings, import bindings (live links to other modules)</td>
+      </tr>
+    </table>
+
+    <h2>Variable Environment in Memory — Conceptual Model</h2>
+    <p>Think of a variable environment as a table of identifier → value entries, plus a pointer to the outer environment:</p>
+
+    <div class="diagram">
+      <div class="diagram-title">Variable Environments for nested functions — memory structure</div>
+      <div style="display:flex;flex-direction:column;gap:0;align-items:flex-start">
+        <!-- Global VE -->
+        <div class="ec-box ec-global" style="width:100%">
+          <div class="ec-title-bar">GLOBAL VARIABLE ENVIRONMENT (Environment Record)</div>
+          <div class="ec-body">
+            <div class="ec-row"><div class="ec-key">x</div><div class="ec-val">10</div></div>
+            <div class="ec-row"><div class="ec-key">outer</div><div class="ec-val">[Function: outer]</div></div>
+            <div class="ec-row"><div class="ec-key">[[OuterEnv]]</div><div class="ec-val">null (no outer)</div></div>
+          </div>
+        </div>
+        <div style="padding:8px 24px;font-family:'IBM Plex Mono',monospace;font-size:18px;color:var(--muted)">↓ outer ref</div>
+        <!-- outer VE -->
+        <div class="ec-box ec-func" style="width:90%;margin-left:5%">
+          <div class="ec-title-bar">outer() VARIABLE ENVIRONMENT</div>
+          <div class="ec-body">
+            <div class="ec-row"><div class="ec-key">y</div><div class="ec-val">20</div></div>
+            <div class="ec-row"><div class="ec-key">inner</div><div class="ec-val">[Function: inner]</div></div>
+            <div class="ec-row"><div class="ec-key">[[OuterEnv]]</div><div class="ec-val">→ Global VE (above)</div></div>
+          </div>
+        </div>
+        <div style="padding:8px 48px;font-family:'IBM Plex Mono',monospace;font-size:18px;color:var(--muted)">↓ outer ref</div>
+        <!-- inner VE -->
+        <div class="ec-box ec-func2" style="width:80%;margin-left:10%">
+          <div class="ec-title-bar">inner() VARIABLE ENVIRONMENT</div>
+          <div class="ec-body">
+            <div class="ec-row"><div class="ec-key">z</div><div class="ec-val">30</div></div>
+            <div class="ec-row"><div class="ec-key">[[OuterEnv]]</div><div class="ec-val">→ outer()'s VE (above)</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h2><code>var</code> vs <code>let</code>/<code>const</code> — Different Records</h2>
+    <p>ES6 introduced an important distinction. Inside a function context, there are conceptually two separate environment records:</p>
+    <ul>
+      <li>The <strong>Variable Environment</strong> — holds <code>var</code> declarations (function-scoped)</li>
+      <li>The <strong>Lexical Environment</strong> — holds <code>let</code>/<code>const</code> declarations and block scoping</li>
+    </ul>
+    <p>This is why <code>var</code> ignores block boundaries (<code>if</code>, <code>for</code>, <code>while</code>) while <code>let</code>/<code>const</code> respect them — they live in different record structures.</p>
+
+    <div class="code-wrap">
+      <div class="code-header"><div class="code-dots"><span class="code-dot cd-r"></span><span class="code-dot cd-y"></span><span class="code-dot cd-g"></span></div><span class="code-filename">var-vs-let-scope.js</span></div>
+      <pre>
+<span class="kw">function</span> <span class="fn">demo</span>() {
+  <span class="kw">if</span> (<span class="op">true</span>) {
+    <span class="kw">var</span> <span class="var-name">a</span> <span class="op">=</span> <span class="num">1</span>;   <span class="cmt">// goes into function VE → visible whole function</span>
+    <span class="kw">let</span> <span class="var-name">b</span> <span class="op">=</span> <span class="num">2</span>;   <span class="cmt">// goes into block Lexical Env → dies after block</span>
+    <span class="kw">const</span> <span class="var-name">c</span> <span class="op">=</span> <span class="num">3</span>; <span class="cmt">// same as let</span>
+  }
+  console.log(<span class="var-name">a</span>); <span class="cmt">// 1 — var escapes block into function VE</span>
+  console.log(<span class="var-name">b</span>); <span class="cmt">// ReferenceError — b only existed in block VE</span>
+}</pre>
+    </div>
+
+    <h2>Closures — The Variable Environment Persists</h2>
+    <p>A closure occurs when a function retains a reference to the variable environment of its enclosing scope, even after that scope's execution context has been popped from the call stack. The VE is not garbage collected because the inner function's scope chain holds a live reference to it.</p>
+
+    <div class="code-wrap">
+      <div class="code-header"><div class="code-dots"><span class="code-dot cd-r"></span><span class="code-dot cd-y"></span><span class="code-dot cd-g"></span></div><span class="code-filename">closure-venv.js</span></div>
+      <pre>
+<span class="kw">function</span> <span class="fn">makeAdder</span>(<span class="var-name">x</span>) {
+  <span class="cmt">// makeAdder's VE: { x: 5 } ←────────────────────┐</span>
+  <span class="kw">return</span> <span class="kw">function</span>(<span class="var-name">y</span>) {                           <span class="cmt">│</span>
+    <span class="kw">return</span> <span class="var-name">x</span> <span class="op">+</span> <span class="var-name">y</span>;  <span class="cmt">// x found via scope chain ──────┘</span>
+  };
+}
+
+<span class="kw">const</span> <span class="var-name">add5</span> <span class="op">=</span> <span class="fn">makeAdder</span>(<span class="num">5</span>);
+<span class="cmt">// makeAdder EC is popped from stack here</span>
+<span class="cmt">// BUT: add5's [[OuterEnv]] still points to makeAdder's VE</span>
+<span class="cmt">// makeAdder's VE {x:5} cannot be garbage collected</span>
+
+console.log(<span class="fn">add5</span>(<span class="num">3</span>));  <span class="cmt">// 8 — x=5 still accessible</span>
+console.log(<span class="fn">add5</span>(<span class="num">10</span>)); <span class="cmt">// 15</span></pre>
+    </div>
+
+    <div class="callout callout-note">
+      <div class="callout-label">Memory Implication</div>
+      Every closure keeps its outer variable environment alive in memory. Creating many closures that capture large environments (objects, arrays, etc.) can be a source of memory pressure in long-lived applications. This is why you should avoid capturing unnecessarily large objects in closures.
+    </div>
+
+  </div>
+
+  <div class="bottom-nav">
+    <button class="bottom-nav-btn" onclick="goTo(5)">← Previous</button>
+    <span class="bottom-nav-center">07 of 08</span>
+    <button class="bottom-nav-btn" onclick="goTo(7)">Next: Scope Chain →</button>
+  </div>
+</article>
+
+<!-- ════════════════════════════════════
+     PAGE 7 — Scope Chain Formation
+════════════════════════════════════════ -->
+<article class="topic-page" id="page-7">
+  <div class="topic-hero" data-num="08">
+    <div class="topic-eyebrow">Topic 08 of 08</div>
+    <h1>Scope Chain<br>Formation</h1>
+    <p class="lead">The scope chain is the mechanism that allows JavaScript to resolve identifiers across nested functions. It is set at function <em>definition</em> time — not at call time. This is the engine's implementation of lexical scoping.</p>
+  </div>
+
+  <div class="content-body">
+
+    <h2>What Is the Scope Chain?</h2>
+    <p>The <strong>scope chain</strong> is a linked list of variable environments that the engine walks when resolving an identifier. Every execution context has a scope chain built from:</p>
+    <ol>
+      <li>Its own variable environment (searched first)</li>
+      <li>Its outer environment reference → that environment's VE</li>
+      <li>That environment's outer reference → …</li>
+      <li>Until the Global VE is reached</li>
+      <li>If not found → <code>ReferenceError</code></li>
+    </ol>
+
+    <div class="callout callout-definition">
+      <div class="callout-label">Lexical Scoping</div>
+      JavaScript uses <strong>lexical scoping</strong> (also called static scoping): the scope chain of a function is determined by <em>where the function is written in the source code</em>, not where it is called from. A function's scope chain is fixed at the point of its creation.
+    </div>
+
+    <h2>Scope Chain Formation — Step by Step</h2>
+    <p>When the engine creates a function (during the creation phase of the enclosing EC), it attaches a <code>[[Environment]]</code> internal slot to the function object. This slot holds a reference to the variable environment of the scope where the function was created. When the function is later called, its new EC's outer environment reference is set to the value of <code>[[Environment]]</code>.</p>
+
+    <div class="diagram">
+      <div class="diagram-title">Scope chain formation for nested functions</div>
+      <div class="scope-nest">
+        <div class="scope-level" style="border-color:var(--accent2);background:rgba(26,107,58,0.03)">
+          <div class="scope-tag" style="color:var(--accent2)">Global Scope</div>
+          <div class="scope-vars" style="color:var(--ink)">
+            <span style="color:var(--accent2)">x</span> = 1 &nbsp;|&nbsp; <span style="color:var(--accent2)">outer</span> = [Function]
+          </div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)">[[OuterEnv]] → null</div>
+          <div class="scope-inner-wrap">
+            <div class="scope-level" style="border-color:var(--accent3);background:rgba(28,63,122,0.03)">
+              <div class="scope-tag" style="color:var(--accent3)">outer() Scope — created inside Global</div>
+              <div class="scope-vars" style="color:var(--ink)">
+                <span style="color:var(--accent3)">y</span> = 20 &nbsp;|&nbsp; <span style="color:var(--accent3)">inner</span> = [Function]
+              </div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)">[[OuterEnv]] → Global Scope ↑</div>
+              <div class="scope-inner-wrap">
+                <div class="scope-level" style="border-color:var(--accent4);background:rgba(122,79,28,0.03)">
+                  <div class="scope-tag" style="color:var(--accent4)">inner() Scope — created inside outer()</div>
+                  <div class="scope-vars" style="color:var(--ink)">
+                    <span style="color:var(--accent4)">z</span> = 30
+                  </div>
+                  <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)">[[OuterEnv]] → outer()'s Scope ↑</div>
+                  <div style="margin-top:12px;font-family:'IBM Plex Mono',monospace;font-size:11px;background:rgba(122,79,28,0.08);padding:10px;border-radius:4px">
+                    Looking up <code style="background:none;padding:0;color:var(--accent)">x</code> from here:<br>
+                    ① inner's own env → not found<br>
+                    ② outer()'s env → not found<br>
+                    ③ Global env → <span style="color:var(--accent2)">found! x = 1</span> ✅
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h2>Lexical vs Dynamic Scoping — Why It Matters</h2>
+    <p>JavaScript's lexical scoping means the scope chain is determined by the code's structure, not the call stack at runtime. This is different from dynamic scoping (which some other languages use) where the scope chain follows the call chain.</p>
+
+    <div class="code-wrap">
+      <div class="code-header"><div class="code-dots"><span class="code-dot cd-r"></span><span class="code-dot cd-y"></span><span class="code-dot cd-g"></span></div><span class="code-filename">lexical-scope-proof.js</span></div>
+      <pre>
+<span class="kw">let</span> <span class="var-name">value</span> <span class="op">=</span> <span class="str">"global"</span>;
+
+<span class="kw">function</span> <span class="fn">getScope</span>() {
+  <span class="kw">return</span> <span class="var-name">value</span>;    <span class="cmt">// scope chain set at DEFINITION — sees "global"</span>
+}
+
+<span class="kw">function</span> <span class="fn">caller</span>() {
+  <span class="kw">let</span> <span class="var-name">value</span> <span class="op">=</span> <span class="str">"local"</span>;  <span class="cmt">// this does NOT affect getScope</span>
+  <span class="kw">return</span> <span class="fn">getScope</span>();     <span class="cmt">// calls getScope from inside caller</span>
+}
+
+console.log(<span class="fn">caller</span>()); <span class="cmt">// "global" — NOT "local"!</span>
+<span class="cmt">// Proof: getScope's scope chain was locked at definition time</span>
+<span class="cmt">// It looks up its own chain (→ Global), not caller's chain</span></pre>
+    </div>
+
+    <div class="callout callout-important">
+      <div class="callout-label">The Golden Rule of Lexical Scope</div>
+      A function's scope chain is determined by <strong>where it was written</strong>, not where it is called from. Even if you call a function from a deeply nested context, it will only "see" the variables in the scopes that surrounded it <em>at the point of its definition</em>.
+    </div>
+
+    <h2>Identifier Resolution Algorithm</h2>
+    <p>When the engine encounters an identifier (like <code>x</code>), it runs this algorithm:</p>
+
+    <div class="diagram">
+      <div class="diagram-title">Identifier resolution — step-by-step algorithm</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:12px">
+        <div style="display:flex;flex-direction:column;gap:0;align-items:center">
+          <div style="padding:10px 20px;background:rgba(28,63,122,0.08);border:2px solid rgba(28,63,122,0.4);border-radius:6px;color:var(--accent3);text-align:center">
+            Encounter identifier <code>x</code>
+          </div>
+          <div style="height:20px;width:2px;background:var(--muted)"></div>
+          <div style="padding:10px 20px;background:rgba(26,107,58,0.08);border:2px solid rgba(26,107,58,0.4);border-radius:6px;color:var(--accent2);text-align:center">
+            Search current EC's Variable Environment
+          </div>
+          <div style="display:flex;gap:40px;align-items:flex-start;margin-top:0">
+            <div style="display:flex;flex-direction:column;align-items:center">
+              <div style="height:20px;width:2px;background:var(--muted)"></div>
+              <div style="padding:6px 14px;font-size:10px;background:rgba(26,107,58,0.08);border:1px solid rgba(26,107,58,0.4);border-radius:4px;color:var(--accent2)">FOUND → return value ✅</div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center">
+              <div style="height:20px;width:2px;background:var(--muted)"></div>
+              <div style="padding:6px 14px;font-size:10px;background:rgba(192,57,43,0.08);border:1px solid rgba(192,57,43,0.4);border-radius:4px;color:var(--accent)">NOT FOUND → follow [[OuterEnv]]</div>
+              <div style="height:20px;width:2px;background:var(--muted)"></div>
+              <div style="padding:10px 20px;background:rgba(122,79,28,0.08);border:2px solid rgba(122,79,28,0.4);border-radius:6px;color:var(--accent4);text-align:center">
+                Search outer VE<br><span style="font-size:10px;opacity:0.8">(repeat until found or null)</span>
+              </div>
+              <div style="height:20px;width:2px;background:var(--muted)"></div>
+              <div style="padding:6px 14px;font-size:10px;background:rgba(192,57,43,0.08);border:1px solid rgba(192,57,43,0.4);border-radius:4px;color:var(--accent)">Outer is null (Global reached) → <strong>ReferenceError</strong></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h2>Variable Shadowing</h2>
+    <p>When an inner scope declares a variable with the same name as an outer scope, the inner variable <strong>shadows</strong> the outer one. The outer variable is not modified — it simply isn't reached during identifier resolution because the search stops at the inner scope.</p>
+
+    <div class="code-wrap">
+      <div class="code-header"><div class="code-dots"><span class="code-dot cd-r"></span><span class="code-dot cd-y"></span><span class="code-dot cd-g"></span></div><span class="code-filename">shadowing.js</span></div>
+      <pre>
+<span class="kw">let</span> <span class="var-name">color</span> <span class="op">=</span> <span class="str">"red"</span>;    <span class="cmt">// Global VE: { color: "red" }</span>
+
+<span class="kw">function</span> <span class="fn">paint</span>() {
+  <span class="kw">let</span> <span class="var-name">color</span> <span class="op">=</span> <span class="str">"blue"</span>;  <span class="cmt">// paint's VE: { color: "blue" } — SHADOWS global</span>
+  console.log(<span class="var-name">color</span>);   <span class="cmt">// "blue" — resolution stops at paint's VE</span>
+}
+
+<span class="fn">paint</span>();
+console.log(<span class="var-name">color</span>);    <span class="cmt">// "red" — global color unchanged, untouched</span></pre>
+    </div>
+
+    <h2>Block Scope and the Scope Chain (ES6+)</h2>
+    <p>With <code>let</code> and <code>const</code>, every block (<code>{}</code>) creates its own lexical environment that is added to the scope chain. This means the scope chain can include block-level environments between function environments.</p>
+
+    <div class="code-wrap">
+      <div class="code-header"><div class="code-dots"><span class="code-dot cd-r"></span><span class="code-dot cd-y"></span><span class="code-dot cd-g"></span></div><span class="code-filename">block-scope-chain.js</span></div>
+      <pre>
+<span class="kw">function</span> <span class="fn">example</span>() {       <span class="cmt">// Function VE: { a: 1 }</span>
+  <span class="kw">let</span> <span class="var-name">a</span> <span class="op">=</span> <span class="num">1</span>;
+  {                         <span class="cmt">// Block VE: { b: 2 }  outer → Function VE</span>
+    <span class="kw">let</span> <span class="var-name">b</span> <span class="op">=</span> <span class="num">2</span>;
+    {                       <span class="cmt">// Block VE: { c: 3 }  outer → Block VE above</span>
+      <span class="kw">let</span> <span class="var-name">c</span> <span class="op">=</span> <span class="num">3</span>;
+      console.log(a, b, c); <span class="cmt">// 1 2 3 — chain: innerBlock→outerBlock→function</span>
+    }
+    <span class="cmt">// console.log(c); // ReferenceError — c's block closed</span>
+  }
+  <span class="cmt">// console.log(b); // ReferenceError — b's block closed</span>
+}
+<span class="fn">example</span>();</pre>
+    </div>
+
+    <h2>Complete Scope Chain Summary</h2>
+
+    <table class="comparison-table">
+      <tr>
+        <th>Concept</th>
+        <th>Details</th>
+      </tr>
+      <tr>
+        <td>When is it formed?</td>
+        <td>At function <strong>definition</strong> time — the <code>[[Environment]]</code> slot is set when the function object is created</td>
+      </tr>
+      <tr>
+        <td>What does it contain?</td>
+        <td>A linked list of Variable Environments from current → outer → ... → Global</td>
+      </tr>
+      <tr>
+        <td>How is it walked?</td>
+        <td>Identifier lookup searches inward-to-outward, stopping at first match</td>
+      </tr>
+      <tr>
+        <td>Can it be modified at runtime?</td>
+        <td>No. The chain structure is fixed. Values within environments can change, but the chain links cannot.</td>
+      </tr>
+      <tr>
+        <td>What enables closures?</td>
+        <td>The outer environment reference keeps outer VEs alive even after their ECs are popped</td>
+      </tr>
+      <tr>
+        <td>Does call location matter?</td>
+        <td>Never — lexical scope means only <em>definition</em> location matters</td>
+      </tr>
+    </table>
+
+    <div class="callout callout-note">
+      <div class="callout-label">What to Study Next</div>
+      These 8 topics form the complete foundation. Natural next topics to study: <strong>Closures in depth</strong>, <strong><code>this</code> binding rules</strong>, <strong>Prototype chain</strong>, <strong>Event Loop and async model</strong>, and <strong>Garbage collection</strong>. Each of these builds directly on the execution model you now understand.
+    </div>
+
+  </div>
+
+  <div class="bottom-nav">
+    <button class="bottom-nav-btn" onclick="goTo(6)">← Previous</button>
+    <span class="bottom-nav-center">08 of 08 — Complete!</span>
+    <button class="bottom-nav-btn" onclick="goTo(0)">↩ Back to Start</button>
+  </div>
+</article>
+
+</main>
+</div>
+
+<script>
+// ─── NAVIGATION ───
+let currentPage = 0;
+
+function goTo(n) {
+  document.querySelectorAll('.topic-page').forEach((p,i) => {
+    p.classList.toggle('active', i === n);
+  });
+  document.querySelectorAll('.nav-item').forEach((item, i) => {
+    item.classList.toggle('active', i === n);
+  });
+  document.getElementById('progressBar').style.width = ((n + 1) / 8 * 100) + '%';
+  currentPage = n;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ─── GEC STEP-THROUGH PLAYER ───
+const gecSteps = [
+  {
+    line: 0,
+    code: [
+      '<span class="cmt">// Script loaded. Engine begins.</span>',
+      '<span class="kw">var</span> <span class="var-name">x</span> = <span class="num">10</span>;',
+      '<span class="kw">var</span> <span class="var-name">y</span>;',
+      '<span class="kw">function</span> <span class="fn">double</span>(<span class="var-name">n</span>) {',
+      '  <span class="kw">return</span> <span class="var-name">n</span> * <span class="num">2</span>;',
+      '}',
+      '<span class="var-name">y</span> = <span class="fn">double</span>(<span class="var-name">x</span>);',
+      'console.log(<span class="var-name">y</span>);',
+    ],
+    state: {
+      phase: 'Initialization',
+      vars: [],
+      stack: ['(empty)'],
+    },
+    info: 'The engine has received the source code and is about to create the Global Execution Context. Nothing has run yet.'
+  },
+  {
+    line: -1,
+    code: null,
+    state: {
+      phase: '🔵 Creation Phase',
+      vars: [
+        { k: 'x', v: 'undefined', d: 'var hoisted — not yet assigned' },
+        { k: 'y', v: 'undefined', d: 'var hoisted — not yet assigned' },
+        { k: 'double', v: '[Function: double]', d: 'fn declaration — fully stored' },
+        { k: 'this', v: 'window', d: 'global object in browser' },
+      ],
+      stack: ['Global EC'],
+    },
+    info: 'Creation Phase complete. The engine scanned all declarations: x and y are set to undefined (hoisted), double is stored as a complete function. Global EC is pushed to the call stack.'
+  },
+  {
+    line: 1,
+    code: null,
+    state: {
+      phase: '🟢 Execution Phase',
+      vars: [
+        { k: 'x', v: '10', d: 'assignment executed' },
+        { k: 'y', v: 'undefined', d: 'not yet reached' },
+        { k: 'double', v: '[Function: double]', d: 'unchanged' },
+      ],
+      stack: ['Global EC'],
+    },
+    info: 'Line 1 executed: var x = 10. The placeholder "undefined" in the variable environment is replaced with the actual value 10.'
+  },
+  {
+    line: 2,
+    code: null,
+    state: {
+      phase: '🟢 Execution Phase',
+      vars: [
+        { k: 'x', v: '10', d: '' },
+        { k: 'y', v: 'undefined', d: 'var y — no initializer, stays undefined' },
+        { k: 'double', v: '[Function: double]', d: '' },
+      ],
+      stack: ['Global EC'],
+    },
+    info: 'Line 2: var y; — y was already set to undefined in the creation phase. The declaration line itself has no additional effect in the execution phase.'
+  },
+  {
+    line: 6,
+    code: null,
+    state: {
+      phase: '🟢 Execution Phase',
+      vars: [
+        { k: 'x', v: '10', d: '' },
+        { k: 'y', v: 'undefined → 20', d: 'double(x) called, returns 20' },
+        { k: 'double', v: '[Function: double]', d: '' },
+      ],
+      stack: ['double(10) EC ← running', 'Global EC ← paused'],
+    },
+    info: 'Line 6: y = double(x) — a new Function EC for double(10) is created and pushed. The Global EC is paused. double runs, returns 20, its EC is popped, and y is assigned 20.'
+  },
+  {
+    line: 7,
+    code: null,
+    state: {
+      phase: '🟢 Execution Phase',
+      vars: [
+        { k: 'x', v: '10', d: '' },
+        { k: 'y', v: '20', d: 'final value' },
+        { k: 'double', v: '[Function: double]', d: '' },
+      ],
+      stack: ['console.log EC ← brief', 'Global EC'],
+    },
+    info: 'Line 7: console.log(y) — logs 20 to the console. Script ends. Global EC will be popped when the tab closes.'
+  },
+];
+
+let gecCurrent = 0;
+
+function renderGec() {
+  const step = gecSteps[gecCurrent];
+  document.getElementById('gec-step-num').textContent = gecCurrent + 1;
+
+  // Code pane
+  const codeEl = document.getElementById('gec-code');
+  const lines = gecSteps[0].code;
+  codeEl.innerHTML = lines.map((l, i) => {
+    const active = step.line === i;
+    return `<div class="step-line${active ? ' current' : ''}">${l || '&nbsp;'}</div>`;
+  }).join('');
+
+  // State pane
+  const stateEl = document.getElementById('gec-state');
+  const s = step.state;
+  let html = `<div class="state-section">
+    <div class="state-label" style="color:var(--accent3)">Current Phase</div>
+    <div style="font-weight:600;font-size:13px;padding:8px 0">${s.phase}</div>
+  </div>`;
+
+  if (s.vars.length) {
+    html += `<div class="state-section"><div class="state-label" style="color:var(--accent2)">Variable Environment</div>`;
+    s.vars.forEach(v => {
+      html += `<div class="state-item"><span class="state-key">${v.k}</span><span class="state-val">${v.v}</span></div>`;
+      if (v.d) html += `<div class="state-desc" style="padding:2px 0 6px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)">${v.d}</div>`;
+    });
+    html += `</div>`;
+  }
+
+  html += `<div class="state-section"><div class="state-label" style="color:var(--accent)">Call Stack</div>`;
+  s.stack.forEach(frame => {
+    html += `<div class="state-item"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">${frame}</span></div>`;
+  });
+  html += `</div>`;
+
+  stateEl.innerHTML = html;
+  document.getElementById('gec-info').textContent = step.info;
+
+  document.getElementById('gec-prev').disabled = gecCurrent === 0;
+  document.getElementById('gec-next').disabled = gecCurrent === gecSteps.length - 1;
+}
+
+function gecStep(dir) {
+  gecCurrent = Math.max(0, Math.min(gecSteps.length - 1, gecCurrent + dir));
+  renderGec();
+}
+
+renderGec();
+</script>
+</body>
+</html>
