@@ -111,13 +111,52 @@ body {
 
 .content-body { padding: 52px 64px; max-width: 900px; }
 
-@media (max-width: 900px) {
+@media (max-width: 768px) {
   .sidebar { display: none; }
-  .topic-hero, .content-body { padding: 32px 24px; }
+
+  .topic-hero {
+    padding: 24px 16px 20px;
+  }
   .topic-hero::before { display: none; }
-  .step-body { grid-template-columns: 1fr; }
-  .phase-grid { grid-template-columns: 1fr; }
-  .two-col { grid-template-columns: 1fr; }
+  .topic-hero h1 { font-size: 1.7rem; }
+  .topic-hero .lead { font-size: 0.95rem; }
+
+  .content-body {
+    padding: 20px 16px;
+  }
+  .content-body h2 { font-size: 1.3rem; margin: 28px 0 12px; }
+  .content-body h3 { font-size: 1.05rem; }
+  .content-body p { font-size: 14.5px; }
+  .content-body li { font-size: 14px; }
+
+  .diagram { padding: 16px 12px; overflow-x: auto; }
+
+  pre { padding: 14px 14px; font-size: 11.5px; line-height: 1.75; }
+
+  .callout { padding: 14px 16px; font-size: 13.5px; }
+
+  .comparison-table { display: block; overflow-x: auto; }
+  .comparison-table th,
+  .comparison-table td { padding: 8px 10px; font-size: 12px; }
+
+  /* Collapse two-column grids to single column */
+  .step-body { grid-template-columns: 1fr !important; }
+  .phase-grid { grid-template-columns: 1fr !important; }
+  .two-col { grid-template-columns: 1fr !important; }
+  .step-code-pane { border-right: none; border-bottom: 1px solid #2a2a3a; }
+
+  /* Collapse inline style grids (score boards, diagrams) */
+  .exercise-header { flex-direction: column; align-items: flex-start; }
+  .usecase-header { flex-wrap: wrap; }
+  .usecase-tag { margin-left: 0; margin-top: 4px; }
+
+  .bottom-nav { padding: 20px 16px; }
+  .bottom-nav-btn { padding: 9px 12px; font-size: 10px; gap: 4px; }
+  .bottom-nav-center { display: none; }
+
+  .step-player-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+
+  .answer-toggle { font-size: 10px; padding: 7px 12px; }
 }
 
 .content-body h2 {
@@ -410,6 +449,55 @@ code {
 .leak-table { width:100%; border-collapse:collapse; font-size:13.5px; margin:20px 0; }
 .leak-table th { padding:10px 14px; background:var(--paper2); border:1px solid var(--border); font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--muted); text-align:left; }
 .leak-table td { padding:10px 14px; border:1px solid var(--border); vertical-align:top; line-height:1.6; }
+
+/* ─── MOBILE INLINE GRID OVERRIDES ─── */
+@media (max-width: 768px) {
+  /* Force all inline-style grids inside diagrams to stack */
+  .diagram > div[style*="grid"],
+  .diagram > div[style*="display:grid"],
+  .diagram > div[style*="display: grid"] {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+  /* Collapse any inline grid-template-columns */
+  [style*="grid-template-columns: repeat(3"],
+  [style*="grid-template-columns:repeat(3"],
+  [style*="grid-template-columns: repeat(4"],
+  [style*="grid-template-columns: 1fr 1fr 1fr"],
+  [style*="grid-template-columns:1fr 1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+  [style*="grid-template-columns: 1fr 1fr"],
+  [style*="grid-template-columns:1fr 1fr"],
+  [style*="grid-template-columns: 1fr auto 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+  /* Pipeline arrows — hide on mobile, rely on vertical stacking */
+  .diagram [style*="font-size:20px"],
+  .diagram [style*="font-size: 20px"] {
+    transform: rotate(90deg);
+    margin: 4px auto;
+    display: block;
+    text-align: center;
+  }
+  /* Code wrap inside exercise cards */
+  .exercise .code-wrap { margin: 0; border-radius: 0; }
+  /* Step player: make code + state stack vertically */
+  .step-body { grid-template-columns: 1fr !important; }
+  /* Font size reduction for mono labels inside diagrams on mobile */
+  .diagram { font-size: 12px; }
+  .ec-key, .ec-val { font-size: 11px; padding: 6px 10px; }
+  .ec-title-bar { font-size: 11px; padding: 8px 12px; }
+  /* Scope nesting — reduce indent on mobile */
+  .scope-inner-wrap { margin-top: 8px; }
+  .scope-level { padding: 12px; }
+  /* Call stack frames */
+  .cs-frame { width: 200px; font-size: 11px; }
+  /* Tables scroll horizontally */
+  table { display: block; overflow-x: auto; white-space: nowrap; }
+}
+
 </style>
 </head>
 <body>
